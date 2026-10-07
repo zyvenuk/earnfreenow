@@ -52,6 +52,8 @@
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
 
+    html += Z.pwa.cards();
+
     html += Z.slots.html('home_top');
 
     html += '<div class="card"><button class="row row-btn" data-go="/watch">' +
@@ -74,6 +76,7 @@
 
     html += Z.slots.html('home_bottom') + '</section>';
     el.innerHTML = html;
+    Z.pwa.bindCards(el);
     Z.slots.attach(el, ctx);
   };
 
@@ -160,6 +163,7 @@
       '</div>' +
       '<div class="card">' +
       '<button class="row row-btn" id="edit-name"><span class="row-ic">' + Z.icon('edit') + '</span><span class="row-main"><span class="row-title">Edit name</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
+      Z.pwa.profileRows() +
       '<button class="row row-btn" id="change-pw"><span class="row-ic">' + Z.icon('lock') + '</span><span class="row-main"><span class="row-title">Change password</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       '<button class="row row-btn" data-go="/support"><span class="row-ic">' + Z.icon('lifebuoy') + '</span><span class="row-main"><span class="row-title">Help &amp; support</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       '<button class="row row-btn" data-go="/referral"><span class="row-ic acc">' + Z.icon('gift') + '</span><span class="row-main"><span class="row-title">Referrals</span><span class="row-sub">Invite friends and earn</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
@@ -170,6 +174,7 @@
       '</section>';
     Z.slots.attach(el, ctx);
 
+    Z.pwa.bindProfile(el);
     Z.$('#logout', el).addEventListener('click', async function () {
       if (await Z.confirm({ title: 'Log out?', text: 'You can log back in any time.', confirm: 'Log out' })) Z.signOut();
     });

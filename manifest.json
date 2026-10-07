@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "Zyven",
+  "short_name": "Zyven",
+  "description": "Watch ads and earn rewards.",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F5FA",
+  "theme_color": "#3D4AE0",
+  "icons": [
+    { "src": "monogram.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "monogram.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Watch ads", "short_name": "Watch", "url": "./#/watch", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] },
+    { "name": "Wallet", "short_name": "Wallet", "url": "./#/wallet", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] },
+    { "name": "Invite friends", "short_name": "Invite", "url": "./#/referral", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] }
+  ]
+}

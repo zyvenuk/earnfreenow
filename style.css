@@ -441,3 +441,17 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .offer-warn { color: var(--warn); font-size: 13px; font-weight: 600; }
 .offer .alert { text-align: left; width: 100%; }
 .offer b { color: var(--text); }
+
+/* ---------- Install / push prompts ---------- */
+.pwa-card { display: flex; align-items: center; gap: 10px; padding: 10px 6px 10px 12px; background: var(--accent-soft); border: 1px solid transparent; border-radius: var(--r-md); }
+.pwa-card .quick-ic { background: var(--surface); }
+.pwa-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pwa-text b { font-size: 14.5px; font-weight: 650; }
+.pwa-text span { color: var(--muted); font-size: 12.5px; line-height: 1.3; }
+.pwa-card .icon-btn.sm { margin: 0; color: var(--muted); }
+.steps { margin: 0 0 14px; padding-left: 20px; color: var(--text); display: flex; flex-direction: column; gap: 8px; }
+
+.offer-ic.warn { background: var(--warn-soft); color: var(--warn); }
+#vnote { width: 100%; max-width: 640px; margin-bottom: 12px; }
+#vnote:empty { display: none; }
+#vnote .alert { text-align: left; }

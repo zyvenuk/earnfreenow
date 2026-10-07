@@ -149,6 +149,6 @@
   };
 
   Z.signOut = async function () {
-    try { await sb.auth.signOut(); } catch (e) { console.warn(e); }
+    try { if (Z.push) await Z.push.detach(); await sb.auth.signOut(); } catch (e) { console.warn(e); }
   };
 })();

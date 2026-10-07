@@ -131,6 +131,7 @@
     if (/^#\/(login|signup|forgot|verify|reset)?$/.test(location.hash) || !location.hash) location.hash = '#/home';
     if (/type=signup/.test(Z.bootHash) && !Z.welcomed) { Z.welcomed = true; Z.toast('Email verified. Welcome to Zyven!', 'ok'); }
     Z.route();
+    setTimeout(function () { if (Z.push && Z.state.user) Z.push.sync(); }, 1500);
     if (Z.freshLogin) {
       Z.freshLogin = false;
       setTimeout(function () { if (Z.state.user && !Z.recovery) Z.maybeShowFollowPopup(); }, 500);

@@ -336,7 +336,7 @@
       if (!p) return;
       if (act === 'processing') {
         if (!await Z.confirm({ title: 'Approve this request?', text: 'Mark it as approved and processing. The user will see the update.', confirm: 'Approve' })) return;
-        return Z.run(btn, async function () { await callPayout(id, 'processing'); load(true); });
+        return Z.run(btn, async function () { await callPayout(id, 'processing'); notifyPayout(p, 'processing'); load(true); });
       }
       if (act === 'paid') {
         var sh = Z.sheet('<h2 class="sheet-title">Mark as paid</h2><p class="sheet-text">Only confirm after you sent <b>' + Z.money(p.net_amount) + '</b> to ' + Z.esc(p.account_number) + ' on ' + (Z.methods[p.method] || {}).name + '.</p>' +
@@ -346,6 +346,7 @@
           ev.preventDefault();
           Z.run(Z.$('button[type=submit]', sh.el), async function () {
             await callPayout(id, 'paid', null, Z.$('#ref', sh.el).value);
+            notifyPayout(p, 'paid');
             Z.toast('Marked as paid', 'ok'); sh.close(); load(true);
           }, Z.$('#pderr', sh.el));
         });
@@ -360,6 +361,7 @@
           if (reason.length < 3) return Z.formError(Z.$('#rjerr', s2.el), 'Enter a reason of at least 3 characters.');
           Z.run(Z.$('button[type=submit]', s2.el), async function () {
             await callPayout(id, 'rejected', reason);
+            notifyPayout(p, 'rejected', reason);
             Z.toast('Request rejected and refunded', 'ok'); s2.close(); load(true);
           }, Z.$('#rjerr', s2.el));
         });
@@ -367,6 +369,15 @@
     });
     load(true);
   };
+
+  // Best-effort push to the user whose payout changed (never blocks the admin action)
+  function notifyPayout(p, status, reason) {
+    var m = (Z.methods[p.method] || {}).name || 'payout';
+    var t = { processing: ['Payout approved', 'Your ' + m + ' payout of ' + Z.money(p.net_amount) + ' is being processed.'],
+              paid: ['Payout sent', Z.money(p.net_amount) + ' was sent to your ' + m + ' account.'],
+              rejected: ['Payout rejected', (reason || 'Your request was rejected') + '. ' + Z.money(p.amount) + ' was returned to your balance.'] }[status];
+    if (t && Z.push) Z.push.adminSend({ user_id: p.user_id, title: t[0], body: t[1].slice(0, 200), url: '#/payout' }).catch(function (e) { console.warn('[Zyven] payout push', e); });
+  }
 
   async function callPayout(id, status, reason, ref) {
     var r = await sb.rpc('admin_update_payout', { p_id: id, p_status: status, p_reason: reason || null, p_reference: ref || null });
@@ -384,11 +395,15 @@
   }
 
   SECTIONS.announcements = async function (body, ctx) {
-    var r = await sb.from('announcements').select('*').order('created_at', { ascending: false });
+    var both = await Promise.all([
+      sb.from('announcements').select('*').order('created_at', { ascending: false }),
+      sb.from('push_subscriptions').select('id', { count: 'exact', head: true })
+    ]);
+    var r = both[0], devices = both[1].count || 0;
     if (ctx.stale()) return;
     if (r.error) return retry(body, function () { Z.route(); });
     var list = r.data || [];
-    body.innerHTML = '<div class="page-head"><div><h2>Announcements</h2><p class="sub">Shown to users under the bell icon.</p></div>' +
+    body.innerHTML = '<div class="page-head"><div><h2>Announcements</h2><p class="sub">Shown under the bell icon. ' + devices + (devices === 1 ? ' device has' : ' devices have') + ' push turned on.</p></div>' +
       '<button class="btn btn-primary btn-sm" id="new">' + Z.icon('plus') + 'New</button></div>' +
       '<div class="card">' + (list.length ? list.map(function (a) {
         var t = Z.ANN[a.type] || Z.ANN.info;
@@ -421,6 +436,7 @@
       Z.field({ id: 'pr', label: 'Priority', type: 'select', value: String(a.priority), options: PRIORITIES }) + '</div>' +
       Z.field({ id: 'ex', label: 'Expires (optional)', type: 'datetime-local', value: Z.toLocalInput(a.expires_at), hint: 'After this time the announcement disappears for users.' }) +
       Z.switchEl('ac', a.is_active, 'Active') +
+      Z.switchEl('pu', false, isNew ? 'Also send as push notification' : 'Send as push notification now') +
       '<div id="anerr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Publish' : 'Save changes') + '</button>' +
       (isNew ? '' : '<button class="btn btn-danger-ghost btn-block" type="button" id="del">Delete announcement</button>') +
       '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
@@ -440,7 +456,14 @@
       Z.run(Z.$('button[type=submit]', el), async function () {
         var r = isNew ? await sb.from('announcements').insert(p) : await sb.from('announcements').update(p).eq('id', a.id);
         if (r.error) throw r.error;
-        Z.toast(isNew ? 'Announcement published' : 'Announcement saved', 'ok'); sh.close(); Z.route();
+        var msg = isNew ? 'Announcement published' : 'Announcement saved';
+        if (Z.$('#pu', el).checked && p.is_active) {
+          try {
+            var pr = await Z.push.adminSend({ title: p.title, body: p.message.slice(0, 200), url: '#/notifications' });
+            msg += '. Push sent to ' + pr.sent + (pr.sent === 1 ? ' device' : ' devices');
+          } catch (e) { console.error(e); msg += ', but the push could not be sent'; }
+        }
+        Z.toast(msg, 'ok'); sh.close(); Z.route();
       }, err);
     });
     var del = Z.$('#del', el);
