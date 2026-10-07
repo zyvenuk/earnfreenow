@@ -119,7 +119,7 @@
     opts = opts || {};
     var root = Z.$('#sheet-root');
     var back = document.createElement('div');
-    back.className = 'sheet-backdrop';
+    back.className = 'sheet-backdrop' + (opts.center ? ' center' : '');
     back.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-grab"></div>' + html + '</div>';
     root.appendChild(back);
     document.body.classList.add('no-scroll');
@@ -181,7 +181,7 @@
   };
   var BADGES = {
     pending: 'Pending', processing: 'Processing', paid: 'Paid', rejected: 'Rejected', cancelled: 'Cancelled',
-    active: 'Active', suspended: 'Suspended', inactive: 'Inactive', scheduled: 'Scheduled', expired: 'Expired', live: 'Live', off: 'Off', nocode: 'No code'
+    active: 'Active', suspended: 'Suspended', inactive: 'Inactive', scheduled: 'Scheduled', expired: 'Expired', live: 'Live', off: 'Off', nocode: 'No code', valid: 'Valid', invalid: 'Invalid', locked: 'Locked', transferred: 'Unlocked'
   };
   Z.badge = function (s) { return '<span class="badge b-' + s + '">' + (BADGES[s] || Z.esc(s)) + '</span>'; };
 
@@ -213,6 +213,18 @@
     return '<div class="chips" role="tablist">' + items.map(function (it) {
       return '<button class="chip' + (it[0] === active ? ' on' : '') + '" ' + attr + '="' + it[0] + '">' + Z.esc(it[1]) + '</button>';
     }).join('') + '</div>';
+  };
+
+  // Folded history: shows the first `limit` rows, the rest sit behind a "Show N more" toggle.
+  Z.fold = function (rows, opts) {
+    opts = opts || {};
+    var limit = opts.limit || 2, expanded = !!opts.expanded;
+    if (rows.length <= limit) return rows.join('');
+    var rest = rows.length - limit;
+    return rows.slice(0, limit).join('') +
+      '<div class="fold-more"' + (expanded ? '' : ' hidden') + '>' + rows.slice(limit).join('') + '</div>' +
+      '<button type="button" class="fold-toggle" data-fold data-rest="' + rest + '" aria-expanded="' + expanded + '">' +
+      '<span>' + (expanded ? 'Show less' : 'Show ' + rest + ' more') + '</span>' + Z.icon('chevron', 'fold-chev') + '</button>';
   };
 
   Z.copy = async function (text) {
@@ -256,6 +268,10 @@
     if (r.error) throw r.error;
     Z.state.summary = r.data; Z.state.summaryAt = Date.now();
     Z.updateBalanceChip();
+    if (typeof r.data.unread_notifications === 'number') {
+      Z.state.unread = r.data.unread_notifications; Z.state.unreadAt = Date.now();
+      if (Z.updateBell) Z.updateBell();
+    }
     return r.data;
   };
   Z.invalidateSummary = function () { Z.state.summaryAt = 0; };
@@ -275,6 +291,15 @@
       inp.type = show ? 'text' : 'password';
       eye.innerHTML = Z.icon(show ? 'eye-off' : 'eye');
       eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      return;
+    }
+    var fd = e.target.closest('[data-fold]');
+    if (fd) {
+      var more = fd.previousElementSibling, open = more.hidden; // hidden now => about to expand
+      more.hidden = !open;
+      fd.setAttribute('aria-expanded', open);
+      fd.firstChild.textContent = open ? 'Show less' : 'Show ' + fd.getAttribute('data-rest') + ' more';
+      fd.dispatchEvent(new CustomEvent('zfold', { bubbles: true, detail: { expanded: open } }));
       return;
     }
     var cp = e.target.closest('[data-copy]');

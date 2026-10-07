@@ -9,18 +9,22 @@
     payout_request: { label: 'Payout requested', icon: 'payout', cls: 'neg' },
     payout_paid: { label: 'Payout paid', icon: 'check', cls: 'pos' },
     payout_rejected: { label: 'Payout rejected, refunded', icon: 'refresh', cls: 'pos' },
-    payout_cancelled: { label: 'Payout cancelled, refunded', icon: 'refresh', cls: 'pos' }
+    payout_cancelled: { label: 'Payout cancelled, refunded', icon: 'refresh', cls: 'pos' },
+    referral_bonus: { label: 'Referral bonus (locked)', icon: 'gift', cls: '' },
+    referral_unlock_out: { label: 'Moved to Main Wallet', icon: 'refresh', cls: '' },
+    referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
+    referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' }
   };
   Z.TX = TX;
 
   Z.txRow = function (t) {
     var m = TX[t.type] || { label: t.type, icon: 'coin', cls: '' };
-    var amt = Number(t.amount);
+    var amt = Number(t.amount), inRef = t.wallet === 'referral'; // Referral Wallet rows are not withdrawable: shown neutral
     return '<div class="row">' +
       '<span class="row-ic ' + m.cls + '">' + Z.icon(m.icon) + '</span>' +
       '<span class="row-main"><span class="row-title">' + m.label + '</span>' +
-      '<span class="row-sub">' + Z.fmtDate(t.created_at) + (t.note ? ' \u00b7 ' + Z.esc(t.note) : '') + '</span></span>' +
-      (amt !== 0 ? '<span class="amt ' + (amt > 0 ? 'pos' : 'neg') + '">' + Z.money(amt, { sign: true }) + '</span>' : '') +
+      '<span class="row-sub">' + Z.fmtDate(t.created_at) + (inRef ? ' \u00b7 Referral Wallet' : (t.note ? ' \u00b7 ' + Z.esc(t.note) : '')) + '</span></span>' +
+      (amt !== 0 ? '<span class="amt ' + (inRef ? 'muted' : (amt > 0 ? 'pos' : 'neg')) + '">' + Z.money(amt, { sign: true }) + '</span>' : '') +
       '</div>';
   };
 
@@ -44,6 +48,10 @@
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
       '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button></div></div>';
 
+    html += '<div class="quick-grid">' +
+      '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
+      '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
+
     html += Z.slots.html('home_top');
 
     html += '<div class="card"><button class="row row-btn" data-go="/watch">' +
@@ -61,7 +69,7 @@
     html += '</div>';
 
     html += '<div class="section-head"><h3>Recent activity</h3><button class="link-btn" data-go="/wallet">See all</button></div>';
-    if (s.recent && s.recent.length) html += '<div class="card">' + s.recent.map(Z.txRow).join('') + '</div>';
+    if (s.recent && s.recent.length) html += '<div class="card">' + Z.fold(s.recent.map(Z.txRow)) + '</div>';
     else html += '<div class="card">' + Z.empty({ icon: 'receipt', title: 'No activity yet', text: 'Your rewards and payouts will show up here.' }) + '</div>';
 
     html += Z.slots.html('home_bottom') + '</section>';
@@ -74,32 +82,43 @@
     all: null,
     rewards: ['ad_reward'],
     payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
+    referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'],
     other: ['admin_adjustment']
   };
-  var PAGE = 20;
+  var PAGE = 10;
 
   Z.views.wallet = async function (el, ctx) {
     var s = await Z.loadSummary(true);
     if (ctx.stale()) return;
-    var filter = 'all', items = [], done = false, loading = false;
+    var filter = 'all', items = [], done = false, loading = false, expanded = false;
 
     el.innerHTML = '<section class="page">' +
       '<div class="card wallet-card"><span class="bc-label dark">Available balance</span>' +
       '<div class="wc-amount">' + Z.money(s.balance) + '</div>' +
       '<div class="wc-grid"><div><span>Total earned</span><b>' + Z.money(s.total_earned) + '</b></div>' +
       '<div><span>Paid out</span><b>' + Z.money(s.total_paid_out) + '</b></div></div>' +
+      '<button class="ref-wallet" data-go="/referral"><span class="row-ic">' + Z.icon('gift') + '</span><span class="row-main"><span class="row-title">Referral Wallet</span>' +
+      '<span class="row-sub">Locked, not withdrawable. Moves to Main Wallet automatically.</span></span><b class="amt">' + Z.money(s.referral_balance) + '</b></button>' +
       '<button class="btn btn-primary btn-block" data-go="/payout">Request payout</button></div>' +
       '<div class="section-head"><h3>Transactions</h3></div>' +
-      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-f') +
+      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-f') +
       '<div class="card" id="tx"></div><div id="more"></div>' + Z.slots.html('wallet_bottom') + '</section>';
     Z.slots.attach(el, ctx);
 
     var tx = Z.$('#tx', el), more = Z.$('#more', el);
 
+    // "Load more" (server paging) only appears once the folded list is expanded
+    function renderMore() {
+      more.innerHTML = done || !items.length || !expanded ? '' : '<button class="btn btn-tonal btn-block" id="more-btn">Load more</button>';
+      var mb = Z.$('#more-btn', more);
+      if (mb) mb.addEventListener('click', function () { Z.busy(mb, true); load(false); });
+    }
+    tx.addEventListener('zfold', function (e) { expanded = e.detail.expanded; renderMore(); });
+
     async function load(reset) {
       if (loading) return; loading = true;
-      if (reset) { items = []; done = false; tx.innerHTML = Z.skel(4, 56); more.innerHTML = ''; }
-      var q = sb.from('transactions').select('id,type,amount,balance_after,note,created_at')
+      if (reset) { items = []; done = false; expanded = false; tx.innerHTML = Z.skel(2, 56); more.innerHTML = ''; }
+      var q = sb.from('transactions').select('id,type,amount,balance_after,wallet,note,created_at')
         .order('created_at', { ascending: false }).range(items.length, items.length + PAGE - 1);
       if (FILTERS[filter]) q = q.in('type', FILTERS[filter]);
       var r = await q;
@@ -112,10 +131,8 @@
       }
       items = items.concat(r.data || []);
       done = (r.data || []).length < PAGE;
-      tx.innerHTML = items.length ? items.map(Z.txRow).join('') : Z.empty({ icon: 'receipt', title: 'No transactions', text: 'Nothing here yet.' });
-      more.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="more-btn">Load more</button>';
-      var mb = Z.$('#more-btn', more);
-      if (mb) mb.addEventListener('click', function () { Z.busy(mb, true); load(false); });
+      tx.innerHTML = items.length ? Z.fold(items.map(Z.txRow), { expanded: expanded }) : Z.empty({ icon: 'receipt', title: 'No transactions', text: 'Nothing here yet.' });
+      renderMore();
     }
 
     Z.$('.chips', el).addEventListener('click', function (e) {
@@ -144,6 +161,8 @@
       '<div class="card">' +
       '<button class="row row-btn" id="edit-name"><span class="row-ic">' + Z.icon('edit') + '</span><span class="row-main"><span class="row-title">Edit name</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       '<button class="row row-btn" id="change-pw"><span class="row-ic">' + Z.icon('lock') + '</span><span class="row-main"><span class="row-title">Change password</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
+      '<button class="row row-btn" data-go="/support"><span class="row-ic">' + Z.icon('lifebuoy') + '</span><span class="row-main"><span class="row-title">Help &amp; support</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
+      '<button class="row row-btn" data-go="/referral"><span class="row-ic acc">' + Z.icon('gift') + '</span><span class="row-main"><span class="row-title">Referrals</span><span class="row-sub">Invite friends and earn</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       (Z.state.isAdmin ? '<button class="row row-btn" data-go="/admin"><span class="row-ic acc">' + Z.icon('shield') + '</span><span class="row-main"><span class="row-title">Admin panel</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
       '</div>' +
       Z.slots.html('profile_bottom') +

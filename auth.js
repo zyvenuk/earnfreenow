@@ -8,6 +8,7 @@
       '<div class="auth-head"><img src="monogram.png" alt="Zyven" class="auth-logo" onerror="this.style.display=\'none\'">' +
       '<h1>' + title + '</h1><p>' + sub + '</p></div>' + body + '</section>';
   }
+  function storedRef() { try { return localStorage.getItem('zyven:ref') || ''; } catch (e) { return ''; } }
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 
   Z.views.login = function (el) {
@@ -29,15 +30,17 @@
       if (!pw) return Z.formError(err, 'Enter your password.');
       Z.formError(err, '');
       Z.run(Z.$('button[type=submit]', f), async function () {
+        Z.freshLogin = true; // set before the auth event fires; cleared again if login fails
         var r = await sb.auth.signInWithPassword({ email: email, password: pw });
         if (r.error) {
+          Z.freshLogin = false;
           var msg = Z.errMsg(r.error);
           var unconfirmed = /not confirmed/i.test(r.error.message || '');
           Z.formError(err, msg, unconfirmed ? ' <button type="button" class="link-btn" id="resend">Resend email</button>' : '');
           var rs = Z.$('#resend', el);
           if (rs) rs.addEventListener('click', function () { Z.resendVerification(email, rs); });
         }
-        // success: onAuthStateChange routes the user
+        // success: onAuthStateChange routes the user, then the follow popup shows
       });
     });
   };
@@ -48,6 +51,7 @@
       Z.field({ id: 'name', label: 'Full name', placeholder: 'Your name', attrs: 'autocomplete="name" maxlength="60" required' }) +
       Z.field({ id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', attrs: 'autocomplete="email" inputmode="email" autocapitalize="off" required' }) +
       Z.field({ id: 'pw', label: 'Password', type: 'password', placeholder: 'At least 8 characters', attrs: 'autocomplete="new-password" required' }) +
+      Z.field({ id: 'ref', label: 'Referral code (optional)', value: storedRef(), placeholder: 'Enter a friend\u2019s code', attrs: 'maxlength="12" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase"' }) +
       '<div id="err"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Create account</button>' +
       '</form>' +
@@ -60,11 +64,16 @@
       if (name.length < 2) return Z.formError(err, 'Enter your full name.');
       if (!validEmail(email)) return Z.formError(err, 'Enter a valid email address.');
       if (pw.length < 8) return Z.formError(err, 'Password must be at least 8 characters.');
+      var ref = Z.$('#ref', el).value.trim().toUpperCase();
+      if (ref && !/^[A-Z0-9]{4,12}$/.test(ref)) return Z.formError(err, 'That referral code does not look right.');
       Z.formError(err, '');
       Z.run(Z.$('button[type=submit]', f), async function () {
-        var r = await sb.auth.signUp({ email: email, password: pw, options: { data: { full_name: name }, emailRedirectTo: Z.siteUrl() } });
+        var meta = { full_name: name };
+        if (ref) meta.referral_code = ref;
+        var r = await sb.auth.signUp({ email: email, password: pw, options: { data: meta, emailRedirectTo: Z.siteUrl() } });
         if (r.error) throw r.error;
-        if (r.data.session) return; // email confirmation disabled: signed in, listener routes
+        try { localStorage.removeItem('zyven:ref'); } catch (e) { /* ignore */ }
+        if (r.data.session) { Z.freshLogin = true; return; } // email confirmation disabled: signed in, listener routes
         if (r.data.user && r.data.user.identities && r.data.user.identities.length === 0) {
           return Z.formError(err, 'An account with this email already exists. Try logging in.');
         }

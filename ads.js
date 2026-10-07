@@ -79,6 +79,11 @@
     var me = cur = { wrap: wrap, ad: ad, timer: null, claimed: false, closed: false };
     Z.$('[data-act=close]', wrap).addEventListener('click', function () { V.close(true); });
 
+    // Phone back button / gesture must close the ad (and cancel it), not leave it running underneath.
+    if (!(history.state && history.state.zv)) history.pushState({ zv: 1 }, '');
+    me.onPop = function () { if (cur === me) V.close(true, false, true); };
+    window.addEventListener('popstate', me.onPop);
+
     var r = await sb.rpc('start_ad', { p_ad_id: ad.id });
     if (cur !== me) return; // closed while starting
     if (r.error) {
@@ -182,21 +187,29 @@
       Z.busy(btn, false);
       var next = r.data && r.data.filter(function (a) { return a.available && a.id !== prev; })[0];
       if (!next) { Z.toast('No more ads available right now.'); return V.close(true); }
-      V.close(true, true);
+      V.close(true, true, true);
       V.open(next);
     });
   }
 
-  V.close = async function (force, silent) {
+  V.isOpen = function () { return !!cur; };
+
+  // force: skip the "leave?" prompt. silent: don't refresh the list. keepHistory: history entry already popped / reused.
+  V.close = async function (force, silent, keepHistory) {
     if (!cur) return;
     if (!force && !cur.claimed && cur.s && cur.remaining > 0) {
       var ok = await Z.confirm({ title: 'Leave this ad?', text: 'You will not earn the reward unless you finish.', confirm: 'Leave', cancel: 'Keep watching', danger: true });
-      if (!ok) return;
+      if (!ok || !cur) return;
     }
-    clearInterval(cur.timer);
-    cur.closed = true;
-    cur.wrap.remove();
+    var me = cur;
     cur = null;
+    clearInterval(me.timer);
+    me.closed = true;
+    window.removeEventListener('popstate', me.onPop);
+    // Unfinished ad = void on the server too, so it can never be claimed later.
+    if (!me.claimed && me.s) sb.rpc('cancel_ad', { p_view_id: me.s.view_id }).then(function () {}, function () {});
+    me.wrap.remove();
+    if (!keepHistory && history.state && history.state.zv) history.back();
     if (!Z.$('#sheet-root').children.length) document.body.classList.remove('no-scroll');
     if (!silent && Z.currentRoute === 'watch') Z.route();
   };

@@ -24,20 +24,27 @@
 
   S.html = function (key) { return '<div class="adslot" data-slot="' + key + '"></div>'; };
 
+  // Adsterra snippets often use protocol-relative URLs (//host/...). Force https so they load inside srcdoc frames.
+  S.fixCode = function (code) {
+    return String(code || '').replace(/(["'])\/\/(?=[\w-])/g, '$1https://');
+  };
+
   S.doc = function (code) {
+    code = S.fixCode(code);
     return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<base target="_blank"><style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center}</style>' +
       '</head><body>' + code + '</body></html>';
   };
 
-  // Renders third-party ad code inside an isolated (sandboxed, no same-origin) iframe.
+  // Renders ad code inside its own iframe (keeps multiple Adsterra banners from clashing on the shared atOptions variable).
+  // allow-same-origin is required: Adsterra scripts use cookies/localStorage and render blank without it.
   S.frame = function (host, code, fallbackH, avail) {
     var w = parseInt((/['"]?width['"]?\s*:\s*(\d+)/.exec(code) || [])[1], 10) || 0;
     var h = parseInt((/['"]?height['"]?\s*:\s*(\d+)/.exec(code) || [])[1], 10) || fallbackH || 250;
     var box = document.createElement('div');
     box.className = 'adslot-box';
     var f = document.createElement('iframe');
-    f.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
     f.setAttribute('title', 'Advertisement');
     f.setAttribute('loading', 'lazy');
     f.srcdoc = S.doc(code);

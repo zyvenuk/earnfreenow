@@ -51,7 +51,7 @@
     var st = Z.state.settings;
     if (ctx.stale()) return;
 
-    var hist = [], histDone = false, histLoading = false;
+    var hist = [], histDone = false, histLoading = false, histExpanded = false;
     var method = null;
     var min = Number(st.min_payout);
     var canRequest = st.payouts_enabled && s.status === 'active';
@@ -162,13 +162,18 @@
       hist = hist.concat(r.data || []);
       histDone = (r.data || []).length < PAGE;
       var open = Z.$$('.payout:not(.closed) .p-body:not([hidden])', histEl).map(function (b) { return b.parentNode.getAttribute('data-id'); });
-      histEl.innerHTML = hist.length ? '<div class="card">' + hist.map(function (p) { return Z.payoutItem(p); }).join('') + '</div>' :
+      histEl.innerHTML = hist.length ? '<div class="card">' + Z.fold(hist.map(function (p) { return Z.payoutItem(p); }), { expanded: histExpanded }) + '</div>' :
         Z.empty({ icon: 'payout', title: 'No payout requests', text: 'Your requests and their status will appear here.' });
       open.forEach(function (id) { var b = Z.$('.payout[data-id="' + id + '"] .p-body', histEl); if (b) b.hidden = false; });
-      hmore.innerHTML = histDone || !hist.length ? '' : '<button class="btn btn-tonal btn-block" id="hm">Load more</button>';
+      renderHistMore();
+    }
+    // "Load more" (server paging) only appears once the folded list is expanded
+    function renderHistMore() {
+      hmore.innerHTML = histDone || !hist.length || !histExpanded ? '' : '<button class="btn btn-tonal btn-block" id="hm">Load more</button>';
       var hm = Z.$('#hm', hmore);
       if (hm) hm.addEventListener('click', function () { Z.busy(hm, true); loadHist(false); });
     }
+    histEl.addEventListener('zfold', function (e) { histExpanded = e.detail.expanded; renderHistMore(); });
     histEl.addEventListener('click', async function (e) {
       var t = e.target.closest('[data-toggle]');
       if (t) { var b = t.parentNode.querySelector('.p-body'); b.hidden = !b.hidden; return; }

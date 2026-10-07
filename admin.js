@@ -4,8 +4,8 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'],
-    ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['referrals', 'Referrals', 'gift'],
+    ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
 
@@ -289,7 +289,7 @@
     async function load(reset) {
       if (loading) return; loading = true;
       if (reset) { items = []; pl.innerHTML = Z.skel(3, 120); pm.innerHTML = ''; }
-      var q = sb.from('payout_requests').select('*,profiles(full_name,email)').range(items.length, items.length + PAGE - 1);
+      var q = sb.from('payout_requests').select('*,profiles!payout_requests_user_id_fkey(full_name,email)').range(items.length, items.length + PAGE - 1);
       if (filter === 'open') q = q.in('status', ['pending', 'processing']).order('created_at', { ascending: true });
       else { if (filter !== 'all') q = q.eq('status', filter); q = q.order('created_at', { ascending: false }); }
       var r = await q; loading = false;
@@ -374,6 +374,134 @@
     return r.data;
   }
 
+  /* ---------------- Announcements ---------------- */
+  var PRIORITIES = [['0', 'Normal'], ['1', 'Important'], ['2', 'Urgent']];
+
+  function annStatus(a) {
+    if (!a.is_active) return 'inactive';
+    if (a.expires_at && new Date(a.expires_at) <= Date.now()) return 'expired';
+    return 'active';
+  }
+
+  SECTIONS.announcements = async function (body, ctx) {
+    var r = await sb.from('announcements').select('*').order('created_at', { ascending: false });
+    if (ctx.stale()) return;
+    if (r.error) return retry(body, function () { Z.route(); });
+    var list = r.data || [];
+    body.innerHTML = '<div class="page-head"><div><h2>Announcements</h2><p class="sub">Shown to users under the bell icon.</p></div>' +
+      '<button class="btn btn-primary btn-sm" id="new">' + Z.icon('plus') + 'New</button></div>' +
+      '<div class="card">' + (list.length ? list.map(function (a) {
+        var t = Z.ANN[a.type] || Z.ANN.info;
+        return '<div class="row"><span class="row-ic ' + t.cls + '">' + Z.icon(t.icon) + '</span>' +
+          '<button class="row-btn row-main-btn" data-edit="' + a.id + '"><span class="row-main"><span class="row-title">' + Z.esc(a.title) + '</span>' +
+          '<span class="row-sub">' + Z.fmtDate(a.created_at) + (a.priority > 0 ? ' \u00b7 ' + PRIORITIES[a.priority][1] : '') + (a.expires_at ? ' \u00b7 ends ' + Z.fmtDay(a.expires_at) : '') + '</span></span></button>' +
+          Z.badge(annStatus(a)) +
+          '<label class="switch"><input type="checkbox" data-toggle="' + a.id + '"' + (a.is_active ? ' checked' : '') + ' aria-label="Active"><i></i></label></div>';
+      }).join('') : Z.empty({ icon: 'megaphone', title: 'No announcements', text: 'Create one and every user will see it in their notifications.' })) + '</div>';
+
+    Z.$('#new', body).addEventListener('click', function () { annForm(null); });
+    body.addEventListener('click', function (e) {
+      var ed = e.target.closest('[data-edit]'); if (!ed) return;
+      annForm(list.filter(function (a) { return a.id === ed.getAttribute('data-edit'); })[0]);
+    });
+    body.addEventListener('change', async function (e) {
+      var t = e.target.closest('[data-toggle]'); if (!t) return;
+      var res = await sb.from('announcements').update({ is_active: t.checked }).eq('id', t.getAttribute('data-toggle'));
+      if (res.error) { t.checked = !t.checked; Z.toast(Z.errMsg(res.error), 'error'); }
+      else { Z.toast(t.checked ? 'Announcement activated' : 'Announcement deactivated', 'ok'); Z.route(); }
+    });
+  };
+
+  function annForm(a) {
+    var isNew = !a; a = a || { type: 'info', priority: 0, is_active: true };
+    var sh = Z.sheet('<h2 class="sheet-title">' + (isNew ? 'New announcement' : 'Edit announcement') + '</h2><form id="anf" novalidate>' +
+      Z.field({ id: 'at', label: 'Title', value: a.title, attrs: 'maxlength="100"' }) +
+      Z.field({ id: 'am', label: 'Message', type: 'textarea', rows: 4, value: a.message, attrs: 'maxlength="1000"' }) +
+      '<div class="two">' + Z.field({ id: 'ty', label: 'Type', type: 'select', value: a.type, options: Object.keys(Z.ANN).map(function (k) { return [k, Z.ANN[k].label]; }) }) +
+      Z.field({ id: 'pr', label: 'Priority', type: 'select', value: String(a.priority), options: PRIORITIES }) + '</div>' +
+      Z.field({ id: 'ex', label: 'Expires (optional)', type: 'datetime-local', value: Z.toLocalInput(a.expires_at), hint: 'After this time the announcement disappears for users.' }) +
+      Z.switchEl('ac', a.is_active, 'Active') +
+      '<div id="anerr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Publish' : 'Save changes') + '</button>' +
+      (isNew ? '' : '<button class="btn btn-danger-ghost btn-block" type="button" id="del">Delete announcement</button>') +
+      '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
+    var el = sh.el;
+    Z.$('#anf', el).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#anerr', el);
+      var p = {
+        title: Z.$('#at', el).value.trim(), message: Z.$('#am', el).value.trim(), type: Z.$('#ty', el).value,
+        priority: parseInt(Z.$('#pr', el).value, 10),
+        expires_at: Z.$('#ex', el).value ? new Date(Z.$('#ex', el).value).toISOString() : null,
+        is_active: Z.$('#ac', el).checked
+      };
+      if (!p.title) return Z.formError(err, 'Enter a title.');
+      if (!p.message) return Z.formError(err, 'Enter a message.');
+      if (p.expires_at && new Date(p.expires_at) <= Date.now() && p.is_active) return Z.formError(err, 'The expiry time must be in the future.');
+      Z.run(Z.$('button[type=submit]', el), async function () {
+        var r = isNew ? await sb.from('announcements').insert(p) : await sb.from('announcements').update(p).eq('id', a.id);
+        if (r.error) throw r.error;
+        Z.toast(isNew ? 'Announcement published' : 'Announcement saved', 'ok'); sh.close(); Z.route();
+      }, err);
+    });
+    var del = Z.$('#del', el);
+    if (del) del.addEventListener('click', async function () {
+      if (!await Z.confirm({ title: 'Delete this announcement?', text: 'It will be removed for every user. This cannot be undone.', confirm: 'Delete', danger: true })) return;
+      Z.run(del, async function () {
+        var r = await sb.from('announcements').delete().eq('id', a.id);
+        if (r.error) throw r.error;
+        Z.toast('Announcement deleted', 'ok'); sh.close(); Z.route();
+      });
+    });
+  }
+
+  /* ---------------- Referrals ---------------- */
+  SECTIONS.referrals = async function (body, ctx) {
+    var res = await Promise.all([sb.rpc('admin_referral_stats'), sb.from('platform_settings').select('*').eq('id', true).single()]);
+    if (ctx.stale()) return;
+    if (res[0].error || res[1].error) return retry(body, function () { Z.route(); });
+    var d = res[0].data, s = res[1].data;
+    function stat(label, value, sub) { return '<div class="stat"><span>' + label + '</span><b>' + value + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>'; }
+
+    body.innerHTML = '<div class="page-head"><div><h2>Referrals</h2><p class="sub">2-level program overview and rewards.</p></div></div>' +
+      '<div class="stat-grid">' +
+      stat('Total referrals', d.total, '') + stat('Level 1 / Level 2', d.l1 + ' / ' + d.l2, 'Direct / Indirect') +
+      stat('Valid', d.valid, '') + stat('Invalid', d.invalid, 'Missing 3 ads or verified email') +
+      stat('Referral bonuses', Z.money(Number(d.bonus_locked) + Number(d.bonus_transferred)), d.bonus_count + ' issued') +
+      stat('Bonuses locked', Z.money(d.bonus_locked), 'Waiting in Referral Wallets') +
+      stat('Bonuses unlocked', Z.money(d.bonus_transferred), 'Moved to Main Wallets') +
+      stat('Commissions paid', Z.money(d.commission_total), d.commission_count + ' payments') + '</div>' +
+
+      '<div class="page-head"><div><h2>Rewards</h2><p class="sub">Changes apply to future bonuses and commissions only. Past records keep the amount, rate and unlock date they were created with.</p></div></div>' +
+      '<form class="card form" id="rf" novalidate>' +
+      '<h3 class="mini-title" style="margin:0">Level 1 (direct)</h3><div class="two">' +
+      Z.field({ id: 'b1', label: 'One-time bonus', value: s.ref_l1_bonus, attrs: 'inputmode="decimal"' }) +
+      Z.field({ id: 'c1', label: 'Commission %', value: s.ref_l1_commission, attrs: 'inputmode="decimal"' }) + '</div>' +
+      '<h3 class="mini-title" style="margin:0">Level 2 (indirect)</h3><div class="two">' +
+      Z.field({ id: 'b2', label: 'One-time bonus', value: s.ref_l2_bonus, attrs: 'inputmode="decimal"' }) +
+      Z.field({ id: 'c2', label: 'Commission %', value: s.ref_l2_commission, attrs: 'inputmode="decimal"' }) + '</div>' +
+      Z.field({ id: 'ud', label: 'Bonus unlock delay (days)', value: s.ref_unlock_days, attrs: 'inputmode="numeric"', hint: 'Bonuses move from the Referral Wallet to the Main Wallet after this many days. Default 3.' }) +
+      '<div id="rferr"></div><button class="btn btn-primary btn-block" type="submit">Save referral settings</button></form>';
+
+    Z.$('#rf', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#rferr', body);
+      var p = {
+        ref_l1_bonus: parseFloat(Z.$('#b1', body).value), ref_l1_commission: parseFloat(Z.$('#c1', body).value),
+        ref_l2_bonus: parseFloat(Z.$('#b2', body).value), ref_l2_commission: parseFloat(Z.$('#c2', body).value),
+        ref_unlock_days: parseInt(Z.$('#ud', body).value, 10)
+      };
+      if ([p.ref_l1_bonus, p.ref_l2_bonus].some(function (v) { return !isFinite(v) || v < 0; })) return Z.formError(err, 'Bonuses must be zero or more.');
+      if ([p.ref_l1_commission, p.ref_l2_commission].some(function (v) { return !isFinite(v) || v < 0 || v > 50; })) return Z.formError(err, 'Commission must be between 0 and 50 percent.');
+      if (!isFinite(p.ref_unlock_days) || p.ref_unlock_days < 0 || p.ref_unlock_days > 365) return Z.formError(err, 'Unlock delay must be 0 to 365 days.');
+      Z.run(Z.$('button[type=submit]', body), async function () {
+        var u = await sb.from('platform_settings').update(p).eq('id', true).select().single();
+        if (u.error) throw u.error;
+        Z.state.settings = u.data; Z.formError(err, '');
+        Z.toast('Referral settings saved', 'ok');
+      }, err);
+    });
+  };
+
   /* ---------------- Transactions ---------------- */
   SECTIONS.transactions = async function (body, ctx) {
     var type = '', q = '', items = [], done = false, loading = false;
@@ -422,7 +550,15 @@
       Z.field({ id: 'ff', label: 'Fixed fee', value: s.fee_fixed, attrs: 'inputmode="decimal"' }) + '</div>' +
       Z.field({ id: 'pn', label: 'Payout notice', type: 'textarea', rows: 3, value: s.payout_notice, hint: 'Shown on the Payout screen.' }) +
       Z.switchEl('pe', s.payouts_enabled, 'Payouts enabled') +
-      '<div id="serr"></div><button class="btn btn-primary btn-block" type="submit">Save settings</button></form>';
+      '<div id="serr"></div><button class="btn btn-primary btn-block" type="submit">Save settings</button></form>' +
+      '<div class="page-head"><div><h2>Support &amp; channels</h2><p class="sub">Links users see in Support and the welcome popup. Leave blank to hide.</p></div></div>' +
+      '<form class="card form" id="cf" novalidate>' +
+      Z.field({ id: 'sw', label: 'WhatsApp support link', type: 'url', value: s.support_whatsapp, placeholder: 'https://wa.me/923001234567', attrs: 'inputmode="url" autocapitalize="off"' }) +
+      Z.field({ id: 'st', label: 'Telegram support link', type: 'url', value: s.support_telegram, placeholder: 'https://t.me/yoursupport', attrs: 'inputmode="url" autocapitalize="off"' }) +
+      Z.field({ id: 'se', label: 'Support email', type: 'email', value: s.support_email, placeholder: 'support@example.com', attrs: 'inputmode="email" autocapitalize="off"' }) +
+      Z.field({ id: 'cw', label: 'WhatsApp channel link', type: 'url', value: s.channel_whatsapp, placeholder: 'https://whatsapp.com/channel/...', attrs: 'inputmode="url" autocapitalize="off"' }) +
+      Z.field({ id: 'ct', label: 'Telegram channel link', type: 'url', value: s.channel_telegram, placeholder: 'https://t.me/yourchannel', attrs: 'inputmode="url" autocapitalize="off"' }) +
+      '<div id="cerr"></div><button class="btn btn-primary btn-block" type="submit">Save links</button></form>';
     Z.$('#sf', body).addEventListener('submit', function (e) {
       e.preventDefault();
       var p = {
@@ -441,6 +577,30 @@
         Z.state.settings = u.data;
         Z.formError(err, '');
         Z.toast('Settings saved', 'ok');
+      }, err);
+    });
+
+    Z.$('#cf', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#cerr', body), bad = null;
+      function link(id, label) {
+        var v = Z.$('#' + id, body).value.trim();
+        if (v && !/^https?:\/\/\S+$/i.test(v)) bad = bad || (label + ' must start with https://');
+        return v || null;
+      }
+      var p = {
+        support_whatsapp: link('sw', 'WhatsApp support link'), support_telegram: link('st', 'Telegram support link'),
+        channel_whatsapp: link('cw', 'WhatsApp channel link'), channel_telegram: link('ct', 'Telegram channel link'),
+        support_email: Z.$('#se', body).value.trim() || null
+      };
+      if (bad) return Z.formError(err, bad);
+      if (p.support_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.support_email)) return Z.formError(err, 'Enter a valid support email.');
+      Z.run(Z.$('#cf button[type=submit]', body), async function () {
+        var u = await sb.from('platform_settings').update(p).eq('id', true).select().single();
+        if (u.error) throw u.error;
+        Z.state.settings = u.data;
+        Z.formError(err, '');
+        Z.toast('Links saved', 'ok');
       }, err);
     });
   };

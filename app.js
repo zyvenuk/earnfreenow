@@ -6,6 +6,12 @@
   var tok = 0;
 
   var TITLES = { home: 'Zyven', watch: 'Watch ads', wallet: 'Wallet', payout: 'Payout', profile: 'Profile' };
+  // Screens opened from other screens (no bottom-nav tab of their own)
+  var SUBS = {
+    support: { title: 'Support', back: '/profile', tab: 'profile' },
+    notifications: { title: 'Notifications', back: '/home', tab: '' },
+    referral: { title: 'Referrals', back: '/profile', tab: 'profile' }
+  };
   var AUTH_ROUTES = ['login', 'signup', 'forgot', 'verify'];
 
   Z.ready = false;
@@ -19,18 +25,23 @@
   function setMode(mode) { document.body.setAttribute('data-mode', mode); }
 
   function chrome(name, mode) {
-    var isTab = !!TITLES[name];
+    var isTab = !!TITLES[name], sub = SUBS[name];
     setMode(mode);
-    Z.$('#bar-title').textContent = mode === 'admin' ? 'Admin' : (TITLES[name] || 'Zyven');
-    Z.$('#bar-back').hidden = mode !== 'admin';
-    Z.$('#bar-logo').hidden = mode === 'admin';
+    Z.backTarget = mode === 'admin' ? '/profile' : (sub ? sub.back : '');
+    Z.$('#bar-title').textContent = mode === 'admin' ? 'Admin' : (sub ? sub.title : (TITLES[name] || 'Zyven'));
+    Z.$('#bar-back').hidden = !Z.backTarget;
+    Z.$('#bar-logo').hidden = !!Z.backTarget;
+    Z.$('#bar-bell').hidden = mode !== 'app' || name === 'notifications';
     Z.$('#bar-balance').hidden = !(mode === 'app' && isTab && name !== 'home' && name !== 'wallet');
-    Z.$$('.nav-item').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-tab') === name); });
+    var active = sub ? sub.tab : name;
+    Z.$$('.nav-item').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-tab') === active); });
     if (mode === 'app' && Z.state.summary) Z.updateBalanceChip();
+    if (Z.updateBell) Z.updateBell();
   }
 
   Z.route = async function () {
     if (!Z.ready) return;
+    if (Z.viewer && Z.viewer.isOpen()) Z.viewer.close(true, true, true); // never leave an ad timer running under another screen
     var path = (location.hash || '').replace(/^#/, '').split('?')[0];
     var parts = path.split('/').filter(Boolean);
     var root = parts[0] || '', sub = parts[1] || '';
@@ -38,21 +49,22 @@
 
     if (Z.recovery) { name = 'reset'; mode = 'auth'; }
     else if (!Z.state.user) {
-      name = AUTH_ROUTES.indexOf(root) !== -1 ? root : 'login';
+      name = AUTH_ROUTES.indexOf(root) !== -1 ? root : (Z.refFromLink ? 'signup' : 'login');
       mode = 'auth';
     } else if (root === 'admin') {
       if (!Z.state.isAdmin) return Z.go('/home');
       name = 'admin'; mode = 'admin';
-    } else if (TITLES[root]) name = root;
+    } else if (TITLES[root] || SUBS[root]) name = root;
     else return Z.go('/home');
 
     // normalise URL for signed-out users
-    if (!Z.state.user && !Z.recovery && AUTH_ROUTES.indexOf(root) === -1) { history.replaceState(null, '', '#/login'); }
+    if (!Z.state.user && !Z.recovery && AUTH_ROUTES.indexOf(root) === -1) { history.replaceState(null, '', '#/' + name); Z.refFromLink = false; }
 
     Z.currentRoute = name;
     var myTok = ++tok;
     var ctx = { sub: sub, stale: function () { return myTok !== tok; } };
     chrome(name, mode);
+    if (mode === 'app' && name !== 'notifications') Z.refreshUnread();
     window.scrollTo(0, 0);
     view.innerHTML = mode === 'auth' ? '' : '<section class="page">' + Z.skel(3, 90) + '</section>';
 
@@ -80,14 +92,14 @@
       sb.rpc('is_admin')
     ]);
     if (res[0].error) throw res[0].error;
-    Z.state.settings = res[0].data;
+    Z.state.settings = res[0].data; Z.state.settingsAt = Date.now();
     Z.state.isAdmin = res[1].data === true;
     Z.slots.load(true);
   }
 
   function resetState() {
-    Z.state.session = null; Z.state.user = null; Z.state.isAdmin = false; Z.state.summary = null; Z.state.summaryAt = 0;
-    Z.recovery = false;
+    Z.state.session = null; Z.state.user = null; Z.state.isAdmin = false; Z.state.summary = null; Z.state.summaryAt = 0; Z.state.unread = 0; Z.state.unreadAt = 0;
+    Z.recovery = false; Z.freshLogin = false;
     Z.slots.map = {}; Z.slots.loadedAt = 0;
   }
 
@@ -112,20 +124,39 @@
       return; // token refresh / tab refocus: nothing to redo
     }
     Z.state.session = session; Z.state.user = session.user;
+    try { localStorage.removeItem('zyven:ref'); } catch (e) { /* ignore */ }
     try { await loadContext(); }
     catch (e) { console.error(e); Z.toast('Something went wrong. Please try again.', 'error'); }
     Z.ready = true; hideSplash();
     if (/^#\/(login|signup|forgot|verify|reset)?$/.test(location.hash) || !location.hash) location.hash = '#/home';
     if (/type=signup/.test(Z.bootHash) && !Z.welcomed) { Z.welcomed = true; Z.toast('Email verified. Welcome to Zyven!', 'ok'); }
     Z.route();
+    if (Z.freshLogin) {
+      Z.freshLogin = false;
+      setTimeout(function () { if (Z.state.user && !Z.recovery) Z.maybeShowFollowPopup(); }, 500);
+    }
   }
 
   // Boot
+  // Referral links look like https://site/?ref=CODE : remember the code until the visitor signs up.
+  function captureRef() {
+    try {
+      var q = new URLSearchParams(location.search), c = q.get('ref');
+      if (c && /^[A-Za-z0-9]{4,12}$/.test(c)) { localStorage.setItem('zyven:ref', c.toUpperCase()); Z.refFromLink = true; }
+      if (q.has('ref')) {
+        q.delete('ref');
+        var qs = q.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+      }
+    } catch (e) { /* storage blocked: referral code just won't be prefilled */ }
+  }
+
   var booted = false;
   function boot() {
     if (booted) return; booted = true;
+    captureRef();
     window.addEventListener('hashchange', Z.route);
-    Z.$('#bar-back').addEventListener('click', function () { Z.go('/profile'); });
+    Z.$('#bar-back').addEventListener('click', function () { Z.go(Z.backTarget || '/home'); });
 
     // Expired / invalid email links come back as #error=...
     if (/error_description|error_code/.test(Z.bootHash)) {
