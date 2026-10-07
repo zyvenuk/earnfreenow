@@ -437,3 +437,7 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .quick-t { min-width: 0; display: flex; flex-direction: column; }
 .quick-t b { font-size: 14.5px; font-weight: 650; line-height: 1.2; }
 .quick-t span { color: var(--muted); font-size: 12px; line-height: 1.25; }
+
+.offer-warn { color: var(--warn); font-size: 13px; font-weight: 600; }
+.offer .alert { text-align: left; width: 100%; }
+.offer b { color: var(--text); }

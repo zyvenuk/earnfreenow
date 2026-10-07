@@ -83,6 +83,8 @@
     if (!(history.state && history.state.zv)) history.pushState({ zv: 1 }, '');
     me.onPop = function () { if (cur === me) V.close(true, false, true); };
     window.addEventListener('popstate', me.onPop);
+    me.onVis = function () { if (cur === me) onReturn(); };
+    document.addEventListener('visibilitychange', me.onVis);
 
     var r = await sb.rpc('start_ad', { p_ad_id: ad.id });
     if (cur !== me) return; // closed while starting
@@ -111,14 +113,13 @@
     cur.running = !direct; // in-app ads count down while the page is visible
 
     if (direct) {
+      cur.offerOpened = false; cur.ready = false; cur.hiddenAt = null; cur.closedAt = null; cur.offerWin = null;
       body.innerHTML = '<div class="offer">' + '<div class="offer-ic">' + Z.icon('external') + '</div>' +
-        '<h3>Open the offer</h3><p>Open it and keep it open for ' + s.required_seconds + ' seconds, then come back here to claim your reward.</p>' +
-        '<button class="btn btn-tonal" id="open-offer">Open offer</button></div>';
-      Z.$('#open-offer', wrap).addEventListener('click', function () {
-        window.open(s.target_url, '_blank', 'noopener');
-        cur.running = true; cur.last = performance.now();
-        Z.$('#open-offer', wrap).textContent = 'Open again';
-      });
+        '<h3>Open the offer</h3><p>Tap the button, then stay on the offer page for <b>' + s.required_seconds + ' seconds</b>. ' +
+        'When the time is up, come back here to claim your reward.</p>' +
+        '<p class="offer-warn">If you come back early, the timer restarts.</p>' +
+        '<div id="offer-note"></div><button class="btn btn-tonal" id="open-offer">Open offer</button></div>';
+      Z.$('#open-offer', wrap).addEventListener('click', openOffer);
     } else {
       var host = document.createElement('div');
       host.className = 'viewer-ad';
@@ -131,21 +132,91 @@
     Z.$('#claim', wrap).addEventListener('click', claim);
   }
 
+  /* ---- Direct link / Smart link offers ----
+     The offer opens in another tab. Time only counts while the user is AWAY from this page (on the offer).
+     Coming back before the full time = the attempt is void and a fresh timer/session starts. */
+  function setNote(msg, type) {
+    var n = Z.$('#offer-note', cur.wrap);
+    if (n) n.innerHTML = msg ? '<div class="alert a-' + (type || 'warn') + '">' + Z.icon(type === 'ok' ? 'check' : 'alert') + '<div>' + Z.esc(msg) + '</div></div>' : '';
+  }
+
+  function openOffer() {
+    var s = cur.s;
+    // open a blank tab first so we can cut its link back to this page, then send it to the offer
+    var w = window.open('', '_blank');
+    if (!w) return Z.toast('Please allow pop-ups to open the offer.', 'error');
+    try { w.opener = null; } catch (e) { /* ignore */ }
+    w.location.href = s.target_url;
+    cur.offerWin = w; cur.offerOpened = true; cur.hiddenAt = null; cur.closedAt = null;
+    setNote('', '');
+    tick();
+  }
+
+  function onReturn() {
+    if (!cur.s || cur.s.ad_type !== 'direct_link' || cur.claimed || cur.ready || !cur.offerOpened) return;
+    if (document.visibilityState === 'hidden') { if (!cur.hiddenAt) cur.hiddenAt = Date.now(); return; }
+    if (!cur.hiddenAt) return; // never actually left this page, nothing to judge
+    var end = cur.closedAt || Date.now();
+    var away = Math.max(0, (end - cur.hiddenAt) / 1000);
+    cur.hiddenAt = null;
+    if (away + 0.4 >= cur.s.required_seconds) {
+      cur.ready = true; cur.remaining = 0;
+      setNote('Time completed. You can claim your reward now.', 'ok');
+      var ob = Z.$('#open-offer', cur.wrap); if (ob) ob.hidden = true;
+      tick();
+    } else {
+      restartDirect(Math.floor(away));
+    }
+  }
+
+  async function restartDirect(away) {
+    var me = cur;
+    if (me.restarting) return;
+    me.restarting = true;
+    me.offerOpened = false; me.ready = false; me.hiddenAt = null; me.closedAt = null; me.remaining = me.s.required_seconds;
+    var btn = Z.$('#claim', me.wrap); if (btn) btn.disabled = true;
+    setNote(away > 0
+      ? 'You came back after ' + away + 's. Open the offer again and stay on it for the full ' + me.s.required_seconds + ' seconds.'
+      : 'Open the offer again and stay on it for the full ' + me.s.required_seconds + ' seconds.', 'warn');
+    tick();
+    // a fresh server session voids the old one, so an old timestamp can never be reused
+    var r = await sb.rpc('start_ad', { p_ad_id: me.ad.id });
+    if (cur !== me) return;
+    me.restarting = false;
+    if (r.error) { Z.toast(Z.errMsg(r.error), 'error'); return V.close(true); }
+    me.s = r.data;
+  }
+
   function tick() {
     if (!cur || !cur.s) return;
-    var now = performance.now(), dt = Math.min(1, (now - cur.last) / 1000);
-    cur.last = now;
-    var direct = cur.s.ad_type === 'direct_link';
-    if (cur.running && (direct || document.visibilityState === 'visible')) cur.remaining = Math.max(0, cur.remaining - dt);
-    var req = cur.s.required_seconds;
+    var s = cur.s, direct = s.ad_type === 'direct_link', req = s.required_seconds;
     var vp = Z.$('#vp', cur.wrap), vs = Z.$('#vs', cur.wrap), btn = Z.$('#claim', cur.wrap);
     if (!vp || !vs || !btn) return;
+
+    if (direct) {
+      // notice if the offer tab gets closed while the user is away (best effort)
+      if (cur.offerOpened && !cur.ready && cur.hiddenAt && !cur.closedAt && cur.offerWin) {
+        try { if (cur.offerWin.closed) cur.closedAt = Date.now(); } catch (e) { /* ignore */ }
+      }
+      vp.style.width = cur.ready ? '100%' : '0%';
+      if (cur.ready) {
+        vs.textContent = 'Reward ready';
+        if (!cur.claimed && !cur.restarting && !btn.classList.contains('is-loading')) btn.disabled = false;
+      } else if (cur.offerOpened) {
+        vs.textContent = 'Stay on the offer for ' + req + 's, then come back';
+      } else {
+        vs.textContent = 'Open the offer to start the timer';
+      }
+      return;
+    }
+
+    var now = performance.now(), dt = Math.min(1, (now - cur.last) / 1000);
+    cur.last = now;
+    if (cur.running && document.visibilityState === 'visible') cur.remaining = Math.max(0, cur.remaining - dt);
     vp.style.width = ((1 - cur.remaining / req) * 100).toFixed(1) + '%';
     if (cur.remaining <= 0) {
       vs.textContent = 'Reward ready';
       if (!cur.claimed && !btn.classList.contains('is-loading')) btn.disabled = false;
-    } else if (!cur.running) {
-      vs.textContent = 'Open the offer to start the timer';
     } else {
       vs.textContent = 'Keep watching \u00b7 ' + Math.ceil(cur.remaining) + 's';
     }
@@ -159,7 +230,10 @@
     if (r.error) {
       Z.busy(btn, false);
       Z.toast(Z.errMsg(r.error), 'error');
-      if (/too_early/.test(r.error.message || '')) { cur.remaining = 2; cur.running = true; btn.disabled = true; }
+      if (/too_early/.test(r.error.message || '')) {
+        if (cur.s.ad_type === 'direct_link') restartDirect(0);
+        else { cur.remaining = 2; cur.running = true; btn.disabled = true; }
+      }
       else if (/limit|already|expired|not_found|suspended/.test(r.error.message || '')) V.close(true);
       return;
     }
@@ -206,6 +280,7 @@
     clearInterval(me.timer);
     me.closed = true;
     window.removeEventListener('popstate', me.onPop);
+    document.removeEventListener('visibilitychange', me.onVis);
     // Unfinished ad = void on the server too, so it can never be claimed later.
     if (!me.claimed && me.s) sb.rpc('cancel_ad', { p_view_id: me.s.view_id }).then(function () {}, function () {});
     me.wrap.remove();
