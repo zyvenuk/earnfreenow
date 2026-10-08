@@ -44,7 +44,7 @@
       list.innerHTML = Z.empty({ icon: 'play', title: 'No ads right now', text: 'New ads appear here when they are available. Check back soon.' });
       return;
     }
-    var html = Z.slots.html('watch_top');
+    var html = Z.maint.notices(['platform']) + Z.slots.html('watch_top');
     ads.forEach(function (a, i) {
       html += adCard(a);
       if (i === 1 && ads.length > 2) html += Z.slots.html('watch_between');
@@ -64,9 +64,16 @@
     });
   };
 
-  /* ---------------- Viewer ---------------- */
+  /* ---------------- Viewer ----------------
+     The server decides whether an ad earned its reward:
+       in-app ads : ad must have really rendered (not blocked), then be on screen continuously (heartbeats)
+       direct link: user must stay away on the offer for the full time, coming back early voids the attempt
+     Leaving, going back or hiding the page restarts the ad from zero. */
   var V = Z.viewer = {};
   var cur = null;
+  var BEAT_MS = 2000;
+
+  V.isOpen = function () { return !!cur; };
 
   V.open = async function (ad) {
     var root = Z.$('#viewer-root');
@@ -76,169 +83,267 @@
       '<div class="viewer-title">' + Z.esc(ad.title) + '</div></div><div class="viewer-body center-all"><div class="spinner"></div></div>';
     root.appendChild(wrap);
     document.body.classList.add('no-scroll');
-    var me = cur = { wrap: wrap, ad: ad, timer: null, claimed: false, closed: false };
+    var me = cur = { wrap: wrap, ad: ad, claimed: false, closed: false };
     Z.$('[data-act=close]', wrap).addEventListener('click', function () { V.close(true); });
 
-    // Phone back button / gesture must close the ad (and cancel it), not leave it running underneath.
+    // Phone back button / gesture closes the ad and voids it
     if (!(history.state && history.state.zv)) history.pushState({ zv: 1 }, '');
     me.onPop = function () { if (cur === me) V.close(true, false, true); };
+    me.onVis = function () { if (cur !== me) return; if (document.visibilityState === 'hidden') awayStart(); else awayEnd(); };
+    me.onBlur = function () { if (cur === me && me.s && me.s.ad_type === 'direct_link') awayStart(); };
+    me.onFocus = function () { if (cur === me) awayEnd(); };
     window.addEventListener('popstate', me.onPop);
-    me.onVis = function () { if (cur === me) onReturn(); };
     document.addEventListener('visibilitychange', me.onVis);
+    window.addEventListener('blur', me.onBlur);
+    window.addEventListener('focus', me.onFocus);
 
     var r = await sb.rpc('start_ad', { p_ad_id: ad.id });
     if (cur !== me) return; // closed while starting
-    if (r.error) {
-      Z.toast(Z.errMsg(r.error), 'error');
-      return V.close(true);
-    }
-    cur.s = r.data;
+    if (r.error) { Z.toast(Z.errMsg(r.error), 'error'); return V.close(true); }
+    me.s = r.data;
     render();
   };
 
-  function render() {
-    var s = cur.s, wrap = cur.wrap, direct = s.ad_type === 'direct_link';
-    wrap.innerHTML =
-      '<div class="viewer-bar"><button class="icon-btn" data-act="close" aria-label="Close">' + Z.icon('x') + '</button>' +
-      '<div class="viewer-title">' + Z.esc(s.title) + '</div><div class="reward-chip">' + Z.money(s.reward, { sign: true }) + '</div></div>' +
-      '<div class="viewer-progress"><i id="vp"></i></div>' +
-      '<div class="viewer-body" id="vbody"></div>' +
-      '<div class="viewer-foot"><div class="viewer-status" id="vs"></div>' +
-      '<button class="btn btn-primary btn-block" id="claim" disabled>Claim ' + Z.money(s.reward) + '</button></div>';
-    Z.$('[data-act=close]', wrap).addEventListener('click', function () { V.close(); });
-
-    var body = Z.$('#vbody', wrap);
-    cur.remaining = s.required_seconds;
-    cur.last = performance.now();
-    cur.running = !direct; // in-app ads count down while the page is visible
-
-    if (direct) {
-      cur.offerOpened = false; cur.ready = false; cur.hiddenAt = null; cur.closedAt = null; cur.offerWin = null;
-      body.innerHTML = '<div class="offer">' + '<div class="offer-ic">' + Z.icon('external') + '</div>' +
-        '<h3>Open the offer</h3><p>Tap the button, then stay on the offer page for <b>' + s.required_seconds + ' seconds</b>. ' +
-        'When the time is up, come back here to claim your reward.</p>' +
-        '<p class="offer-warn">If you come back early, the timer restarts.</p>' +
-        '<div id="offer-note"></div><button class="btn btn-tonal" id="open-offer">Open offer</button></div>';
-      Z.$('#open-offer', wrap).addEventListener('click', openOffer);
-    } else {
-      var host = document.createElement('div');
-      host.className = 'viewer-ad';
-      body.appendChild(host);
-      Z.slots.frame(host, s.ad_code || '', s.ad_type === 'video' ? 360 : 300, Math.min(window.innerWidth - 32, 640));
-    }
-
-    cur.timer = setInterval(tick, 250);
-    tick();
-    Z.$('#claim', wrap).addEventListener('click', claim);
+  function stopTimers(me) {
+    clearInterval(me.timer); clearInterval(me.detect); clearInterval(me.beatTimer);
   }
 
-  /* ---- Direct link / Smart link offers ----
-     The offer opens in another tab. Time only counts while the user is AWAY from this page (on the offer).
-     Coming back before the full time = the attempt is void and a fresh timer/session starts. */
   function setNote(msg, type) {
-    var n = Z.$('#offer-note', cur.wrap);
+    var n = cur && Z.$('#vnote', cur.wrap);
     if (n) n.innerHTML = msg ? '<div class="alert a-' + (type || 'warn') + '">' + Z.icon(type === 'ok' ? 'check' : 'alert') + '<div>' + Z.esc(msg) + '</div></div>' : '';
   }
 
-  function openOffer() {
-    var s = cur.s;
-    // open a blank tab first so we can cut its link back to this page, then send it to the offer
-    var w = window.open('', '_blank');
-    if (!w) return Z.toast('Please allow pop-ups to open the offer.', 'error');
-    try { w.opener = null; } catch (e) { /* ignore */ }
-    w.location.href = s.target_url;
-    cur.offerWin = w; cur.offerOpened = true; cur.hiddenAt = null; cur.closedAt = null;
-    setNote('', '');
-    tick();
+  function isDone(me) {
+    if (!me.s || !me.loaded) return false;
+    return me.s.ad_type === 'direct_link' ? !!me.ready : me.srvActive >= me.s.required_seconds - 2;
   }
 
-  function onReturn() {
-    if (!cur.s || cur.s.ad_type !== 'direct_link' || cur.claimed || cur.ready || !cur.offerOpened) return;
-    if (document.visibilityState === 'hidden') { if (!cur.hiddenAt) cur.hiddenAt = Date.now(); return; }
-    if (!cur.hiddenAt) return; // never actually left this page, nothing to judge
-    var end = cur.closedAt || Date.now();
-    var away = Math.max(0, (end - cur.hiddenAt) / 1000);
-    cur.hiddenAt = null;
-    if (away + 0.4 >= cur.s.required_seconds) {
-      cur.ready = true; cur.remaining = 0;
-      setNote('Time completed. You can claim your reward now.', 'ok');
-      var ob = Z.$('#open-offer', cur.wrap); if (ob) ob.hidden = true;
-      tick();
-    } else {
-      restartDirect(Math.floor(away));
-    }
-  }
-
-  async function restartDirect(away) {
+  // Start the same ad again from zero (the new server session voids the old one)
+  async function restart(note) {
     var me = cur;
-    if (me.restarting) return;
+    if (!me || me.restarting) return;
     me.restarting = true;
-    me.offerOpened = false; me.ready = false; me.hiddenAt = null; me.closedAt = null; me.remaining = me.s.required_seconds;
-    var btn = Z.$('#claim', me.wrap); if (btn) btn.disabled = true;
-    setNote(away > 0
-      ? 'You came back after ' + away + 's. Open the offer again and stay on it for the full ' + me.s.required_seconds + ' seconds.'
-      : 'Open the offer again and stay on it for the full ' + me.s.required_seconds + ' seconds.', 'warn');
-    tick();
-    // a fresh server session voids the old one, so an old timestamp can never be reused
+    stopTimers(me);
     var r = await sb.rpc('start_ad', { p_ad_id: me.ad.id });
     if (cur !== me) return;
     me.restarting = false;
     if (r.error) { Z.toast(Z.errMsg(r.error), 'error'); return V.close(true); }
-    me.s = r.data;
+    me.s = r.data; me.note = note || '';
+    render();
   }
 
-  function tick() {
-    if (!cur || !cur.s) return;
-    var s = cur.s, direct = s.ad_type === 'direct_link', req = s.required_seconds;
-    var vp = Z.$('#vp', cur.wrap), vs = Z.$('#vs', cur.wrap), btn = Z.$('#claim', cur.wrap);
-    if (!vp || !vs || !btn) return;
+  function render() {
+    var me = cur, s = me.s, wrap = me.wrap, direct = s.ad_type === 'direct_link';
+    stopTimers(me);
+    me.ready = false; me.loaded = false; me.failed = false; me.offerOpened = false;
+    me.hiddenAt = null; me.closedAt = null; me.leftAt = null; me.offerWin = null;
+    me.srvActive = 0; me.srvAt = performance.now(); me.beatBusy = false; me.lastForce = 0;
 
-    if (direct) {
-      // notice if the offer tab gets closed while the user is away (best effort)
-      if (cur.offerOpened && !cur.ready && cur.hiddenAt && !cur.closedAt && cur.offerWin) {
-        try { if (cur.offerWin.closed) cur.closedAt = Date.now(); } catch (e) { /* ignore */ }
+    wrap.innerHTML =
+      '<div class="viewer-bar"><button class="icon-btn" data-act="close" aria-label="Close">' + Z.icon('x') + '</button>' +
+      '<div class="viewer-title">' + Z.esc(s.title) + '</div><div class="reward-chip">' + Z.money(s.reward, { sign: true }) + '</div></div>' +
+      '<div class="viewer-progress"><i id="vp"></i></div>' +
+      '<div class="viewer-body" id="vbody"><div id="vnote"></div></div>' +
+      '<div class="viewer-foot"><div class="viewer-status" id="vs"></div>' +
+      '<button class="btn btn-primary btn-block" id="claim" disabled>Claim ' + Z.money(s.reward) + '</button></div>';
+    Z.$('[data-act=close]', wrap).addEventListener('click', function () { V.close(); });
+    Z.$('#claim', wrap).addEventListener('click', claim);
+    if (me.note) { setNote(me.note, 'warn'); me.note = ''; }
+
+    if (direct) initDirect(); else initInApp();
+    me.timer = setInterval(tick, 250);
+    tick();
+  }
+
+  /* ---------- Banner / native / video ads ---------- */
+  function initInApp() {
+    var me = cur, s = me.s;
+    var host = document.createElement('div');
+    host.className = 'viewer-ad';
+    Z.$('#vbody', me.wrap).appendChild(host);
+    var frame = Z.slots.frame(host, s.ad_code || '', s.ad_type === 'video' ? 360 : 300, Math.min(window.innerWidth - 32, 640));
+
+    // Is the ad really showing? Blockers either refuse the request or hide what it draws.
+    var hint = false, t0 = Date.now();
+    Z.slots.probe(Z.slots.urlsFrom(s.ad_code || '')).then(function (r) { if (r === 'blocked') hint = true; });
+    me.detect = setInterval(function () {
+      if (cur !== me || me.s !== s) return clearInterval(me.detect);
+      if (Z.slots.rendered(frame)) {
+        clearInterval(me.detect);
+        me.loaded = true;
+        me.beatTimer = setInterval(beat, BEAT_MS);
+        beat();
+        return;
       }
-      vp.style.width = cur.ready ? '100%' : '0%';
-      if (cur.ready) {
-        vs.textContent = 'Reward ready';
-        if (!cur.claimed && !cur.restarting && !btn.classList.contains('is-loading')) btn.disabled = false;
-      } else if (cur.offerOpened) {
-        vs.textContent = 'Stay on the offer for ' + req + 's, then come back';
-      } else {
-        vs.textContent = 'Open the offer to start the timer';
-      }
-      return;
+      var waited = Date.now() - t0;
+      if ((hint && waited > 4000) || waited > 12000) { clearInterval(me.detect); adFailed(hint); }
+    }, 400);
+  }
+
+  function adFailed(blocked) {
+    var me = cur;
+    if (!me) return;
+    me.failed = true;
+    clearInterval(me.detect); clearInterval(me.beatTimer);
+    Z.$('#vbody', me.wrap).innerHTML = '<div id="vnote"></div><div class="offer"><div class="offer-ic warn">' + Z.icon('alert') + '</div>' +
+      '<h3>' + (blocked ? 'Ad blocked' : 'Ad could not load') + '</h3>' +
+      '<p>' + (blocked
+        ? 'An ad blocker, Private DNS or browser shield is blocking this ad. Turn it off for Zyven and try again. Blocked ads do not earn a reward.'
+        : 'The ad was not shown. Check your connection and try again. An ad has to be shown to earn its reward.') + '</p>' +
+      '<button class="btn btn-tonal" id="retry">Try again</button></div>';
+    Z.$('#retry', me.wrap).addEventListener('click', function () { restart(''); });
+    tick();
+  }
+
+  async function beat() {
+    var me = cur;
+    if (!me || !me.s || !me.loaded || me.claimed || me.failed || me.beatBusy) return;
+    if (document.visibilityState !== 'visible') return;
+    var s = me.s;
+    me.beatBusy = true;
+    var r = await sb.rpc('ad_heartbeat', { p_view_id: s.view_id, p_loaded: true });
+    me.beatBusy = false;
+    if (cur !== me || me.s !== s) return;
+    if (r.error) {
+      if (/view_expired/.test(r.error.message || '')) { Z.toast(Z.errMsg(r.error), 'error'); V.close(true); }
+      return; // temporary network problem: the next beat retries
     }
+    me.srvActive = Number(r.data.active) || 0;
+    me.srvAt = performance.now();
+    if (r.data.restarted) setNote('The timer restarted because the ad was not on screen. Keep this page open.', 'warn');
+  }
 
-    var now = performance.now(), dt = Math.min(1, (now - cur.last) / 1000);
-    cur.last = now;
-    if (cur.running && document.visibilityState === 'visible') cur.remaining = Math.max(0, cur.remaining - dt);
-    vp.style.width = ((1 - cur.remaining / req) * 100).toFixed(1) + '%';
-    if (cur.remaining <= 0) {
-      vs.textContent = 'Reward ready';
-      if (!cur.claimed && !btn.classList.contains('is-loading')) btn.disabled = false;
+  /* ---------- Direct link / smart link offers ---------- */
+  function initDirect() {
+    var me = cur, s = me.s;
+    Z.$('#vbody', me.wrap).insertAdjacentHTML('beforeend',
+      '<div class="offer"><div class="offer-ic">' + Z.icon('external') + '</div>' +
+      '<h3>Open the offer</h3><p>Tap the button, then stay on the offer page for <b>' + s.required_seconds + ' seconds</b>. ' +
+      'When the time is up, come back here to claim your reward.</p>' +
+      '<p class="offer-warn">If you come back early, the timer restarts.</p>' +
+      '<button class="btn btn-tonal" id="open-offer" disabled>Open offer</button></div>');
+    Z.$('#open-offer', me.wrap).addEventListener('click', openOffer);
+
+    var origin = '';
+    try { origin = new URL(s.target_url).origin + '/'; } catch (e) { /* bad url */ }
+    Z.slots.probe(origin ? [origin] : []).then(async function (res) {
+      if (cur !== me || me.s !== s) return;
+      if (res === 'blocked') return adFailed(true);
+      var h = await sb.rpc('ad_heartbeat', { p_view_id: s.view_id, p_loaded: true });   // tells the server the offer is reachable
+      if (cur !== me || me.s !== s) return;
+      if (h.error) { Z.toast(Z.errMsg(h.error), 'error'); return V.close(true); }
+      me.loaded = true;
+      var ob = Z.$('#open-offer', me.wrap); if (ob) ob.disabled = false;
+    });
+  }
+
+  function openOffer() {
+    var me = cur, s = me.s;
+    if (!me.loaded || me.offerOpened && me.ready) return;
+    me.offerOpened = true; me.hiddenAt = null; me.closedAt = null;   // set first: blur/hidden fire the moment the tab opens
+    var w = window.open('', '_blank');
+    if (!w) { me.offerOpened = false; return Z.toast('Please allow pop-ups to open the offer.', 'error'); }
+    try { w.opener = null; } catch (e) { /* ignore */ }
+    w.location.href = s.target_url;
+    me.offerWin = w;
+    setNote('', '');
+    tick();
+  }
+
+  // The page went to the background (user is on the offer / another app / another tab)
+  function awayStart() {
+    var me = cur;
+    if (!me || !me.s) return;
+    if (me.s.ad_type === 'direct_link') { if (me.offerOpened && !me.ready && !me.hiddenAt) me.hiddenAt = Date.now(); }
+    else if (document.visibilityState === 'hidden' && !me.leftAt) me.leftAt = Date.now();
+  }
+  function awayEnd() {
+    var me = cur;
+    if (!me || !me.s || document.visibilityState === 'hidden') return;
+    if (me.s.ad_type === 'direct_link') returnDirect(); else returnInApp();
+  }
+
+  function returnInApp() {
+    var me = cur, left = me.leftAt;
+    me.leftAt = null;
+    if (!left || me.claimed || me.restarting || me.failed || isDone(me)) return;
+    if (Date.now() - left < 1500) return;   // a blink, e.g. pulling down the notification shade
+    restart('You left the ad, so the timer restarted. Watch it until the end.');
+  }
+
+  async function returnDirect() {
+    var me = cur, s = me.s;
+    if (!me.offerOpened || !me.hiddenAt || me.ready || me.claimed || me.restarting) return;
+    var end = me.closedAt || Date.now();
+    var away = Math.max(0, (end - me.hiddenAt) / 1000);
+    me.hiddenAt = null;
+    var r = await sb.rpc('ad_offer_back', { p_view_id: s.view_id, p_away: Math.round(away * 10) / 10 });
+    if (cur !== me || me.s !== s) return;
+    if (r.error) return restart('Something went wrong. Open the offer again and stay on it for the full time.');
+    if (r.data && r.data.ok) {
+      me.ready = true;
+      setNote('Time completed. You can claim your reward now.', 'ok');
+      var ob = Z.$('#open-offer', me.wrap); if (ob) ob.hidden = true;
+      tick();
     } else {
-      vs.textContent = 'Keep watching \u00b7 ' + Math.ceil(cur.remaining) + 's';
+      restart('You came back after ' + Math.floor(away) + 's. Open the offer again and stay on it for the full ' + s.required_seconds + ' seconds.');
     }
+  }
+
+  /* ---------- Status / progress ---------- */
+  function tick() {
+    var me = cur;
+    if (!me || !me.s) return;
+    var s = me.s, req = s.required_seconds;
+    var vp = Z.$('#vp', me.wrap), vs = Z.$('#vs', me.wrap), btn = Z.$('#claim', me.wrap);
+    if (!vp || !vs || !btn) return;
+    var canClaim = false, pct = 0, text = '';
+
+    if (me.failed) {
+      text = 'Ad not shown';
+    } else if (s.ad_type === 'direct_link') {
+      // best effort: notice if the offer tab was closed while the user was away
+      if (me.offerOpened && !me.ready && me.hiddenAt && !me.closedAt && me.offerWin) {
+        try { if (me.offerWin.closed) me.closedAt = Date.now(); } catch (e) { /* ignore */ }
+      }
+      if (me.ready) { canClaim = true; pct = 100; text = 'Reward ready'; }
+      else if (!me.loaded) text = 'Checking offer\u2026';
+      else if (me.offerOpened) text = 'Stay on the offer for ' + req + 's, then come back';
+      else text = 'Open the offer to start the timer';
+    } else if (!me.loaded) {
+      text = 'Loading ad\u2026';
+    } else {
+      var vis = document.visibilityState === 'visible';
+      var shown = me.srvActive + (vis ? (performance.now() - me.srvAt) / 1000 : 0);   // server count + smooth in-between
+      var remaining = Math.max(0, req - shown);
+      pct = Math.min(100, shown / req * 100);
+      if (me.srvActive >= req - 2) { canClaim = true; pct = 100; text = 'Reward ready'; }
+      else if (remaining <= 0) {
+        text = 'Confirming\u2026';
+        if (Date.now() - me.lastForce > 1500) { me.lastForce = Date.now(); beat(); }
+      } else text = 'Keep watching \u00b7 ' + Math.ceil(remaining) + 's';
+    }
+    vp.style.width = pct.toFixed(1) + '%';
+    vs.textContent = text;
+    if (!me.claimed && !btn.classList.contains('is-loading')) btn.disabled = !canClaim;
   }
 
   async function claim() {
-    var btn = Z.$('#claim', cur.wrap);
-    if (cur.claimed) return;
+    var me = cur, btn = Z.$('#claim', me.wrap);
+    if (me.claimed || btn.disabled) return;
     Z.busy(btn, true);
-    var r = await sb.rpc('complete_ad', { p_view_id: cur.s.view_id });
+    var r = await sb.rpc('complete_ad', { p_view_id: me.s.view_id });
+    if (cur !== me) return;
     if (r.error) {
       Z.busy(btn, false);
+      var m = r.error.message || '';
       Z.toast(Z.errMsg(r.error), 'error');
-      if (/too_early/.test(r.error.message || '')) {
-        if (cur.s.ad_type === 'direct_link') restartDirect(0);
-        else { cur.remaining = 2; cur.running = true; btn.disabled = true; }
-      }
-      else if (/limit|already|expired|not_found|suspended/.test(r.error.message || '')) V.close(true);
+      if (/too_early|ad_not_loaded|offer_not_done/.test(m)) restart('The reward could not be confirmed. Please watch the ad again.');
+      else if (/limit|already|expired|not_found|suspended/.test(m)) V.close(true);
       return;
     }
-    cur.claimed = true;
-    clearInterval(cur.timer);
+    me.claimed = true;
+    stopTimers(me);
     Z.invalidateSummary();
     if (Z.state.summary) { Z.state.summary.balance = r.data.balance; Z.updateBalanceChip(); }
     success(r.data);
@@ -266,21 +371,21 @@
     });
   }
 
-  V.isOpen = function () { return !!cur; };
-
   // force: skip the "leave?" prompt. silent: don't refresh the list. keepHistory: history entry already popped / reused.
   V.close = async function (force, silent, keepHistory) {
     if (!cur) return;
-    if (!force && !cur.claimed && cur.s && cur.remaining > 0) {
+    if (!force && !cur.claimed && cur.s && !cur.failed && !isDone(cur)) {
       var ok = await Z.confirm({ title: 'Leave this ad?', text: 'You will not earn the reward unless you finish.', confirm: 'Leave', cancel: 'Keep watching', danger: true });
       if (!ok || !cur) return;
     }
     var me = cur;
     cur = null;
-    clearInterval(me.timer);
+    stopTimers(me);
     me.closed = true;
     window.removeEventListener('popstate', me.onPop);
     document.removeEventListener('visibilitychange', me.onVis);
+    window.removeEventListener('blur', me.onBlur);
+    window.removeEventListener('focus', me.onFocus);
     // Unfinished ad = void on the server too, so it can never be claimed later.
     if (!me.claimed && me.s) sb.rpc('cancel_ad', { p_view_id: me.s.view_id }).then(function () {}, function () {});
     me.wrap.remove();

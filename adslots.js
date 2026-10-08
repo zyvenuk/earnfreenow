@@ -59,6 +59,49 @@
     }
     box.appendChild(f);
     host.appendChild(box);
+    return f;
+  };
+
+  /* ---- Ad blocker / blocked-ad detection (used before an ad can earn a reward) ---- */
+
+  // URLs the ad code will try to load (scripts first), at most 3
+  S.urlsFrom = function (code) {
+    var found = S.fixCode(code).match(/https?:\/\/[^\s"'<>()\\]+/gi) || [], js = [], origins = [];
+    found.forEach(function (u) {
+      try {
+        var x = new URL(u);
+        if (/\.js(\?|$)/i.test(x.pathname)) js.push(x.href);
+        if (origins.indexOf(x.origin) === -1) origins.push(x.origin);
+      } catch (e) { /* not a URL */ }
+    });
+    return (js.length ? js : origins.map(function (o) { return o + '/'; })).slice(0, 3);
+  };
+
+  // 'blocked' = the request was refused (ad blocker, Brave shields, Private DNS...). 'ok' / 'unknown' otherwise.
+  S.probe = async function (urls) {
+    if (!urls || !urls.length || navigator.onLine === false) return 'unknown';
+    var blocked = false, ok = false;
+    await Promise.all(urls.map(async function (u) {
+      var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 7000);
+      try { await fetch(u, { mode: 'no-cors', cache: 'no-store', credentials: 'omit', signal: ctl.signal }); ok = true; }
+      catch (e) { if (!(e && e.name === 'AbortError')) blocked = true; }
+      finally { clearTimeout(t); }
+    }));
+    return blocked ? 'blocked' : (ok ? 'ok' : 'unknown');
+  };
+
+  // Did the ad really draw something visible inside its frame?
+  S.rendered = function (f) {
+    try {
+      var d = f.contentDocument, w = f.contentWindow;
+      if (!d || !d.body) return false;
+      var els = d.body.querySelectorAll('iframe,img,video,canvas,ins,a,svg,object,embed');
+      for (var i = 0; i < els.length; i++) {
+        var r = els[i].getBoundingClientRect(), cs = w.getComputedStyle(els[i]);
+        if (r.width >= 20 && r.height >= 20 && cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') return true;
+      }
+    } catch (e) { /* frame not ready */ }
+    return false;
   };
 
   S.mount = function (root) {

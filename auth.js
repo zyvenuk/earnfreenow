@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   function shell(title, sub, body) {
-    return '<section class="auth">' +
+    return '<section class="auth">' + (Z.maint ? Z.maint.authBanner() : '') +
       '<div class="auth-head"><img src="monogram.png" alt="Zyven" class="auth-logo" onerror="this.style.display=\'none\'">' +
       '<h1>' + title + '</h1><p>' + sub + '</p></div>' + body + '</section>';
   }

@@ -60,6 +60,8 @@
     reason_required: 'Enter a reason of at least 3 characters.',
     cannot_modify_self: 'You cannot change your own account.',
     not_found: 'That item could not be found.',
+    maintenance_platform: 'Zyven is under maintenance right now. Please try again later.',
+    maintenance_payout: 'Payouts are paused for maintenance right now. Please try again later.',
     ad_not_loaded: 'The ad was not shown. Turn off your ad blocker or Private DNS, then try again.',
     offer_not_done: 'Open the offer and stay on it for the full time first.',
     invalid_event: 'Something went wrong. Please try again.',
@@ -79,6 +81,10 @@
   Z.errMsg = function (e) {
     var m = (e && (e.message || e.error_description || e.msg)) || (typeof e === 'string' ? e : '');
     if (e) console.error('[Zyven]', e);
+    if (m.indexOf('maintenance_') !== -1 && Z.maint && !Z._maintBusy) {   // maintenance began while the user was active: show the right screen
+      Z._maintBusy = true;
+      Z.maint.refresh(true).then(function () { Z.route(); }).then(function () { Z._maintBusy = false; }, function () { Z._maintBusy = false; });
+    }
     for (var k in ERR) { if (m.indexOf(k) !== -1) return ERR[k]; }
     if (/Failed to fetch|NetworkError|Load failed|network/i.test(m)) return 'No connection. Check your internet and try again.';
     return 'Something went wrong. Please try again.';
@@ -187,7 +193,7 @@
   };
   var BADGES = {
     pending: 'Pending', processing: 'Processing', paid: 'Paid', rejected: 'Rejected', cancelled: 'Cancelled',
-    active: 'Active', suspended: 'Suspended', inactive: 'Inactive', scheduled: 'Scheduled', expired: 'Expired', live: 'Live', off: 'Off', nocode: 'No code', valid: 'Valid', invalid: 'Invalid', locked: 'Locked', transferred: 'Unlocked'
+    active: 'Active', suspended: 'Suspended', inactive: 'Inactive', scheduled: 'Scheduled', expired: 'Expired', live: 'Live', off: 'Off', nocode: 'No code', valid: 'Valid', invalid: 'Invalid', ongoing: 'In progress', ended: 'Ended', locked: 'Locked', transferred: 'Unlocked'
   };
   Z.badge = function (s) { return '<span class="badge b-' + s + '">' + (BADGES[s] || Z.esc(s)) + '</span>'; };
 

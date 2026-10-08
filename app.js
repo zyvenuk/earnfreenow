@@ -42,6 +42,9 @@
   Z.route = async function () {
     if (!Z.ready) return;
     if (Z.viewer && Z.viewer.isOpen()) Z.viewer.close(true, true, true); // never leave an ad timer running under another screen
+    clearInterval(Z.maint.cd);
+    if (!Z.maint.data) await Z.maint.refresh(true);                                                   // first look: wait for it
+    else if (Date.now() - Z.maint.at > 60000) Z.maint.refresh().then(function (ch) { if (ch) Z.route(); });   // later: refresh quietly
     var path = (location.hash || '').replace(/^#/, '').split('?')[0];
     var parts = path.split('/').filter(Boolean);
     var root = parts[0] || '', sub = parts[1] || '';
@@ -51,6 +54,8 @@
     else if (!Z.state.user) {
       name = AUTH_ROUTES.indexOf(root) !== -1 ? root : (Z.refFromLink ? 'signup' : 'login');
       mode = 'auth';
+    } else if (!Z.state.isAdmin && Z.maint.active('platform')) {
+      name = 'maintenance'; mode = 'auth';        // whole-platform maintenance: users see only this screen (admin is exempt)
     } else if (root === 'admin') {
       if (!Z.state.isAdmin) return Z.go('/home');
       name = 'admin'; mode = 'admin';
@@ -157,6 +162,11 @@
     if (booted) return; booted = true;
     captureRef();
     window.addEventListener('hashchange', Z.route);
+    document.addEventListener('visibilitychange', function () {   // coming back to the app: is maintenance different now?
+      if (document.visibilityState === 'visible' && Z.ready && Z.maint.data && Date.now() - Z.maint.at > 30000) {
+        Z.maint.refresh(true).then(function (ch) { if (ch) Z.route(); });
+      }
+    });
     Z.$('#bar-back').addEventListener('click', function () { Z.go(Z.backTarget || '/home'); });
 
     // Expired / invalid email links come back as #error=...

@@ -5,7 +5,7 @@
 
   var TABS = [
     ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['referrals', 'Referrals', 'gift'],
-    ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
+    ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
 
@@ -29,6 +29,9 @@
 
   var SECTIONS = {};
 
+  /* ---------------- Maintenance (see maintenance.js) ---------------- */
+  SECTIONS.maintenance = function (body, ctx) { return Z.maint.adminView(body, ctx); };
+
   /* ---------------- Dashboard ---------------- */
   SECTIONS.dashboard = async function (body, ctx) {
     var r = await sb.rpc('admin_stats');
@@ -38,7 +41,7 @@
     function stat(label, value, sub, go) {
       return '<div class="stat"' + (go ? ' data-go="' + go + '" role="link"' : '') + '><span>' + label + '</span><b>' + value + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>';
     }
-    body.innerHTML = '<div class="stat-grid">' +
+    body.innerHTML = Z.maint.adminNotice() + '<div class="stat-grid">' +
       stat('Users', d.users, d.new_users_today + ' new today', '/admin/users') +
       stat('Active ads', d.active_ads, '', '/admin/ads') +
       stat('Pending payouts', d.pending_payouts, d.processing_payouts + ' processing', '/admin/payouts') +
@@ -84,6 +87,23 @@
     load(true);
   };
 
+  // Referrals of one user: who referred them, and everyone they referred (name + email + date)
+  function refSection(made, by) {
+    var h = '<h3 class="mini-title">Referred by</h3>';
+    h += by.length ? '<div class="card flat">' + by.map(function (r) {
+      var w = relation(r.referrer) || {};
+      return '<div class="row"><span class="row-main"><span class="row-title">' + Z.esc(w.full_name || 'Unknown') + ' <span class="lvl">L' + r.level + '</span></span>' +
+        '<span class="row-sub">' + Z.esc(w.email || '') + '</span><span class="row-sub">' + Z.fmtDate(r.created_at) + '</span></span></div>';
+    }).join('') + '</div>' : '<p class="muted small">Nobody. This user signed up directly.</p>';
+    h += '<h3 class="mini-title">Referrals made (' + made.length + ')</h3>';
+    h += made.length ? '<div class="card flat">' + Z.fold(made.map(function (r) {
+      var w = relation(r.referred) || {};
+      return '<div class="row"><span class="row-main"><span class="row-title">' + Z.esc(w.full_name || 'Unknown') + ' <span class="lvl">L' + r.level + '</span></span>' +
+        '<span class="row-sub">' + Z.esc(w.email || '') + '</span><span class="row-sub">Joined ' + Z.fmtDate(r.created_at) + (r.validated_at ? ' \u00b7 valid ' + Z.fmtDay(r.validated_at) : '') + '</span></span>' + Z.badge(r.status) + '</div>';
+    }), { limit: 3 }) + '</div>' : '<p class="muted small">No referrals yet.</p>';
+    return h;
+  }
+
   async function userSheet(u, onChange) {
     var w = relation(u.wallets) || {};
     var sh = Z.sheet('<h2 class="sheet-title">' + Z.esc(u.full_name) + '</h2>' +
@@ -97,7 +117,9 @@
 
     Promise.all([
       sb.from('transactions').select('id,type,amount,note,created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(8),
-      sb.from('payout_requests').select('id,method,amount,status,created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(5)
+      sb.from('payout_requests').select('id,method,amount,status,created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(5),
+      sb.from('referrals').select('id,level,status,created_at,validated_at,referred:profiles!referrals_referred_id_fkey(full_name,email)').eq('referrer_id', u.id).order('created_at', { ascending: false }).limit(100),
+      sb.from('referrals').select('id,level,status,created_at,referrer:profiles!referrals_referrer_id_fkey(full_name,email)').eq('referred_id', u.id).order('level')
     ]).then(function (res) {
       var box = Z.$('#ua', sh.el); if (!box) return;
       if (res[0].error) { box.innerHTML = '<p class="muted small">Could not load activity.</p>'; return; }
@@ -105,7 +127,8 @@
       box.innerHTML = (txs.length ? '<div class="card flat">' + txs.map(Z.txRow).join('') + '</div>' : '<p class="muted small">No transactions yet.</p>') +
         (pays.length ? '<h3 class="mini-title">Payout requests</h3><div class="card flat">' + pays.map(function (p) {
           return '<div class="row"><span class="row-main"><span class="row-title">' + (Z.methods[p.method] || {}).name + ' \u00b7 ' + Z.money(p.amount) + '</span><span class="row-sub">' + Z.fmtDate(p.created_at) + '</span></span>' + Z.badge(p.status) + '</div>';
-        }).join('') + '</div>' : '');
+        }).join('') + '</div>' : '') +
+        (!res[2].error && !res[3].error ? refSection(res[2].data || [], res[3].data || []) : '');
     });
 
     Z.$('#tg', sh.el).addEventListener('click', async function () {
@@ -385,7 +408,9 @@
     return r.data;
   }
 
-  /* ---------------- Announcements ---------------- */
+  /* ---------------- Announcements ----------------
+     Everyone      -> "Zyven Alerts" tab in the app
+     One user      -> "My Mails" tab of that user only */
   var PRIORITIES = [['0', 'Normal'], ['1', 'Important'], ['2', 'Urgent']];
 
   function annStatus(a) {
@@ -393,86 +418,151 @@
     if (a.expires_at && new Date(a.expires_at) <= Date.now()) return 'expired';
     return 'active';
   }
+  function audience(a) {
+    if (!a.user_id) return 'All users';
+    var r = relation(a.recipient) || {};
+    return 'To ' + Z.esc(r.full_name || 'user') + (r.email ? ' (' + Z.esc(r.email) + ')' : '');
+  }
 
   SECTIONS.announcements = async function (body, ctx) {
     var both = await Promise.all([
-      sb.from('announcements').select('*').order('created_at', { ascending: false }),
+      sb.from('announcements').select('*,recipient:profiles!announcements_user_id_fkey(full_name,email)').order('created_at', { ascending: false }).limit(150),
       sb.from('push_subscriptions').select('id', { count: 'exact', head: true })
     ]);
     var r = both[0], devices = both[1].count || 0;
     if (ctx.stale()) return;
     if (r.error) return retry(body, function () { Z.route(); });
-    var list = r.data || [];
-    body.innerHTML = '<div class="page-head"><div><h2>Announcements</h2><p class="sub">Shown under the bell icon. ' + devices + (devices === 1 ? ' device has' : ' devices have') + ' push turned on.</p></div>' +
+    var list = r.data || [], filter = 'all';
+
+    body.innerHTML = '<div class="page-head"><div><h2>Announcements</h2><p class="sub">Zyven Alerts go to everyone, My Mails to one user. ' + devices + (devices === 1 ? ' device has' : ' devices have') + ' push turned on.</p></div>' +
       '<button class="btn btn-primary btn-sm" id="new">' + Z.icon('plus') + 'New</button></div>' +
-      '<div class="card">' + (list.length ? list.map(function (a) {
+      Z.chips([['all', 'All'], ['alerts', 'Zyven Alerts'], ['mails', 'My Mails']], 'all', 'data-af') +
+      '<div class="card" id="alist"></div>';
+    var box = Z.$('#alist', body);
+
+    function paint() {
+      var rows = list.filter(function (a) { return filter === 'all' || (filter === 'mails' ? !!a.user_id : !a.user_id); });
+      box.innerHTML = rows.length ? rows.map(function (a) {
         var t = Z.ANN[a.type] || Z.ANN.info;
-        return '<div class="row"><span class="row-ic ' + t.cls + '">' + Z.icon(t.icon) + '</span>' +
+        return '<div class="row"><span class="row-ic ' + t.cls + '">' + Z.icon(a.user_id ? 'mail' : t.icon) + '</span>' +
           '<button class="row-btn row-main-btn" data-edit="' + a.id + '"><span class="row-main"><span class="row-title">' + Z.esc(a.title) + '</span>' +
+          '<span class="row-sub">' + audience(a) + '</span>' +
           '<span class="row-sub">' + Z.fmtDate(a.created_at) + (a.priority > 0 ? ' \u00b7 ' + PRIORITIES[a.priority][1] : '') + (a.expires_at ? ' \u00b7 ends ' + Z.fmtDay(a.expires_at) : '') + '</span></span></button>' +
           Z.badge(annStatus(a)) +
           '<label class="switch"><input type="checkbox" data-toggle="' + a.id + '"' + (a.is_active ? ' checked' : '') + ' aria-label="Active"><i></i></label></div>';
-      }).join('') : Z.empty({ icon: 'megaphone', title: 'No announcements', text: 'Create one and every user will see it in their notifications.' })) + '</div>';
+      }).join('') : Z.empty({ icon: 'megaphone', title: 'Nothing here', text: 'Create an announcement for everyone, or send a mail to one user.' });
+    }
+    paint();
 
     Z.$('#new', body).addEventListener('click', function () { annForm(null); });
-    body.addEventListener('click', function (e) {
+    Z.$('.chips', body).addEventListener('click', function (e) {
+      var c = e.target.closest('[data-af]'); if (!c) return;
+      filter = c.getAttribute('data-af');
+      Z.$$('.chip', body).forEach(function (x) { x.classList.toggle('on', x === c); });
+      paint();
+    });
+    box.addEventListener('click', function (e) {
       var ed = e.target.closest('[data-edit]'); if (!ed) return;
       annForm(list.filter(function (a) { return a.id === ed.getAttribute('data-edit'); })[0]);
     });
-    body.addEventListener('change', async function (e) {
+    box.addEventListener('change', async function (e) {
       var t = e.target.closest('[data-toggle]'); if (!t) return;
       var res = await sb.from('announcements').update({ is_active: t.checked }).eq('id', t.getAttribute('data-toggle'));
       if (res.error) { t.checked = !t.checked; Z.toast(Z.errMsg(res.error), 'error'); }
-      else { Z.toast(t.checked ? 'Announcement activated' : 'Announcement deactivated', 'ok'); Z.route(); }
+      else { Z.toast(t.checked ? 'Activated' : 'Deactivated', 'ok'); Z.route(); }
     });
   };
 
   function annForm(a) {
-    var isNew = !a; a = a || { type: 'info', priority: 0, is_active: true };
+    var isNew = !a; a = a || { type: 'info', priority: 0, is_active: true, user_id: null };
+    var chosen = a.user_id ? Object.assign({ id: a.user_id }, relation(a.recipient) || {}) : null;
     var sh = Z.sheet('<h2 class="sheet-title">' + (isNew ? 'New announcement' : 'Edit announcement') + '</h2><form id="anf" novalidate>' +
+      (isNew
+        ? Z.field({ id: 'au', label: 'Send to', type: 'select', value: 'all', options: [['all', 'Everyone (Zyven Alerts)'], ['user', 'One user (My Mails)']] })
+        : '<div class="field"><label>Sent to</label><div class="pick-chosen"><div><b>' + (a.user_id ? 'One user (My Mails)' : 'Everyone (Zyven Alerts)') + '</b>' + (a.user_id ? '<span>' + audience(a).replace(/^To /, '') + '</span>' : '') + '</div></div></div>') +
+      '<div id="pick-box" hidden><div class="field"><label>Recipient</label><div class="search">' + Z.icon('search') + '<input class="input" id="pk" type="search" placeholder="Search name or email" autocomplete="off"></div></div>' +
+      '<div id="pk-res"></div></div><div id="pk-sel"></div>' +
       Z.field({ id: 'at', label: 'Title', value: a.title, attrs: 'maxlength="100"' }) +
       Z.field({ id: 'am', label: 'Message', type: 'textarea', rows: 4, value: a.message, attrs: 'maxlength="1000"' }) +
       '<div class="two">' + Z.field({ id: 'ty', label: 'Type', type: 'select', value: a.type, options: Object.keys(Z.ANN).map(function (k) { return [k, Z.ANN[k].label]; }) }) +
       Z.field({ id: 'pr', label: 'Priority', type: 'select', value: String(a.priority), options: PRIORITIES }) + '</div>' +
-      Z.field({ id: 'ex', label: 'Expires (optional)', type: 'datetime-local', value: Z.toLocalInput(a.expires_at), hint: 'After this time the announcement disappears for users.' }) +
+      Z.field({ id: 'ex', label: 'Expires (optional)', type: 'datetime-local', value: Z.toLocalInput(a.expires_at), hint: 'After this time it disappears for users.' }) +
       Z.switchEl('ac', a.is_active, 'Active') +
       Z.switchEl('pu', false, isNew ? 'Also send as push notification' : 'Send as push notification now') +
-      '<div id="anerr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Publish' : 'Save changes') + '</button>' +
-      (isNew ? '' : '<button class="btn btn-danger-ghost btn-block" type="button" id="del">Delete announcement</button>') +
+      '<div id="anerr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Send' : 'Save changes') + '</button>' +
+      (isNew ? '' : '<button class="btn btn-danger-ghost btn-block" type="button" id="del">Delete</button>') +
       '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
     var el = sh.el;
+
+    /* recipient picker (only when creating a personal mail) */
+    function drawChosen() {
+      Z.$('#pk-sel', el).innerHTML = chosen && isNew
+        ? '<div class="pick-chosen"><div><b>' + Z.esc(chosen.full_name || 'User') + '</b><span>' + Z.esc(chosen.email || '') + '</span></div><button type="button" class="link-btn" id="pk-change">Change</button></div>'
+        : '';
+      var ch = Z.$('#pk-change', el);
+      if (ch) ch.addEventListener('click', function () { chosen = null; drawChosen(); syncAudience(); });
+    }
+    function syncAudience() {
+      if (!isNew) return;
+      var personal = Z.$('#au', el).value === 'user';
+      Z.$('#pick-box', el).hidden = !personal || !!chosen;
+      Z.$('#pk-sel', el).hidden = !personal;
+    }
+    if (isNew) {
+      Z.$('#au', el).addEventListener('change', syncAudience);
+      Z.$('#pk', el).addEventListener('input', Z.debounce(async function (e) {
+        var q = e.target.value.replace(/[,()%*\\]/g, ' ').trim(), res = Z.$('#pk-res', el);
+        if (q.length < 2) { res.innerHTML = ''; return; }
+        var r = await sb.from('profiles').select('id,full_name,email').or('email.ilike.%' + q + '%,full_name.ilike.%' + q + '%').limit(6);
+        res.innerHTML = r.error ? '' : ((r.data || []).map(function (u) {
+          return '<button type="button" class="pick-row" data-u="' + u.id + '"><b>' + Z.esc(u.full_name) + '</b><span>' + Z.esc(u.email) + '</span></button>';
+        }).join('') || '<p class="muted small" style="margin-top:8px">No user found.</p>');
+        res._users = r.data || [];
+      }, 300));
+      Z.$('#pk-res', el).addEventListener('click', function (e) {
+        var b = e.target.closest('[data-u]'); if (!b) return;
+        chosen = (Z.$('#pk-res', el)._users || []).filter(function (u) { return u.id === b.getAttribute('data-u'); })[0] || null;
+        Z.$('#pk-res', el).innerHTML = ''; drawChosen(); syncAudience();
+      });
+      syncAudience();
+    }
+
     Z.$('#anf', el).addEventListener('submit', function (e) {
       e.preventDefault();
       var err = Z.$('#anerr', el);
+      var personal = isNew ? Z.$('#au', el).value === 'user' : !!a.user_id;
       var p = {
         title: Z.$('#at', el).value.trim(), message: Z.$('#am', el).value.trim(), type: Z.$('#ty', el).value,
         priority: parseInt(Z.$('#pr', el).value, 10),
         expires_at: Z.$('#ex', el).value ? new Date(Z.$('#ex', el).value).toISOString() : null,
         is_active: Z.$('#ac', el).checked
       };
+      if (isNew && personal && !chosen) return Z.formError(err, 'Choose the user who should receive this mail.');
+      if (isNew) p.user_id = personal ? chosen.id : null;
       if (!p.title) return Z.formError(err, 'Enter a title.');
       if (!p.message) return Z.formError(err, 'Enter a message.');
       if (p.expires_at && new Date(p.expires_at) <= Date.now() && p.is_active) return Z.formError(err, 'The expiry time must be in the future.');
+      var target = isNew ? p.user_id : a.user_id;
       Z.run(Z.$('button[type=submit]', el), async function () {
         var r = isNew ? await sb.from('announcements').insert(p) : await sb.from('announcements').update(p).eq('id', a.id);
         if (r.error) throw r.error;
-        var msg = isNew ? 'Announcement published' : 'Announcement saved';
+        var msg = isNew ? (personal ? 'Mail sent' : 'Announcement published') : 'Saved';
         if (Z.$('#pu', el).checked && p.is_active) {
           try {
-            var pr = await Z.push.adminSend({ title: p.title, body: p.message.slice(0, 200), url: '#/notifications' });
+            var pr = await Z.push.adminSend({ user_id: target || undefined, title: p.title, body: p.message.slice(0, 200), url: target ? '#/notifications/mails' : '#/notifications/alerts' });
             msg += '. Push sent to ' + pr.sent + (pr.sent === 1 ? ' device' : ' devices');
-          } catch (e) { console.error(e); msg += ', but the push could not be sent'; }
+          } catch (e2) { console.error(e2); msg += ', but the push could not be sent'; }
         }
         Z.toast(msg, 'ok'); sh.close(); Z.route();
       }, err);
     });
     var del = Z.$('#del', el);
     if (del) del.addEventListener('click', async function () {
-      if (!await Z.confirm({ title: 'Delete this announcement?', text: 'It will be removed for every user. This cannot be undone.', confirm: 'Delete', danger: true })) return;
+      if (!await Z.confirm({ title: 'Delete this?', text: a.user_id ? 'It will be removed from the user\u2019s mails. This cannot be undone.' : 'It will be removed for every user. This cannot be undone.', confirm: 'Delete', danger: true })) return;
       Z.run(del, async function () {
         var r = await sb.from('announcements').delete().eq('id', a.id);
         if (r.error) throw r.error;
-        Z.toast('Announcement deleted', 'ok'); sh.close(); Z.route();
+        Z.toast('Deleted', 'ok'); sh.close(); Z.route();
       });
     });
   }
@@ -503,7 +593,12 @@
       Z.field({ id: 'b2', label: 'One-time bonus', value: s.ref_l2_bonus, attrs: 'inputmode="decimal"' }) +
       Z.field({ id: 'c2', label: 'Commission %', value: s.ref_l2_commission, attrs: 'inputmode="decimal"' }) + '</div>' +
       Z.field({ id: 'ud', label: 'Bonus unlock delay (days)', value: s.ref_unlock_days, attrs: 'inputmode="numeric"', hint: 'Bonuses move from the Referral Wallet to the Main Wallet after this many days. Default 3.' }) +
-      '<div id="rferr"></div><button class="btn btn-primary btn-block" type="submit">Save referral settings</button></form>';
+      '<div id="rferr"></div><button class="btn btn-primary btn-block" type="submit">Save referral settings</button></form>' +
+
+      '<div class="page-head"><div><h2>All referrals</h2><p class="sub">Who referred whom, with name, email and date.</p></div></div>' +
+      '<div class="search">' + Z.icon('search') + '<input class="input" id="rfq" type="search" placeholder="Search name or email" autocomplete="off"></div>' +
+      Z.chips([['all', 'All'], ['1', 'Level 1'], ['2', 'Level 2'], ['valid', 'Valid'], ['invalid', 'Invalid']], 'all', 'data-rf') +
+      '<div class="card" id="rfl"></div><div id="rfm"></div>';
 
     Z.$('#rf', body).addEventListener('submit', function (e) {
       e.preventDefault();
@@ -523,6 +618,47 @@
         Z.toast('Referral settings saved', 'ok');
       }, err);
     });
+
+    /* list of every referral */
+    var q = '', f = 'all', items = [], done = false, loading = false;
+    var rfl = Z.$('#rfl', body), rfm = Z.$('#rfm', body);
+    async function load(reset) {
+      if (loading) return; loading = true;
+      if (reset) { items = []; done = false; rfl.innerHTML = Z.skel(3, 80); rfm.innerHTML = ''; }
+      var qq = sb.from('referrals').select('id,level,status,created_at,validated_at,referrer:profiles!referrals_referrer_id_fkey(full_name,email),referred:profiles!referrals_referred_id_fkey(full_name,email)')
+        .order('created_at', { ascending: false }).range(items.length, items.length + PAGE - 1);
+      if (f === '1' || f === '2') qq = qq.eq('level', parseInt(f, 10));
+      else if (f === 'valid' || f === 'invalid') qq = qq.eq('status', f);
+      var none = false;
+      if (q) {   // find the matching people first, then every referral where they are either side
+        var c = q.replace(/[,()%*\\]/g, ' ').trim();
+        var pr = await sb.from('profiles').select('id').or('email.ilike.%' + c + '%,full_name.ilike.%' + c + '%').limit(25);
+        var ids = (pr.data || []).map(function (x) { return x.id; });
+        if (!ids.length) none = true; else qq = qq.or('referrer_id.in.(' + ids.join(',') + '),referred_id.in.(' + ids.join(',') + ')');
+      }
+      var r = none ? { data: [] } : await qq;
+      loading = false;
+      if (ctx.stale()) return;
+      if (r.error) return retry(rfl, function () { load(true); });
+      items = items.concat(r.data || []); done = (r.data || []).length < PAGE;
+      rfl.innerHTML = items.length ? items.map(function (x) {
+        var a = relation(x.referred) || {}, b = relation(x.referrer) || {};
+        return '<div class="row"><span class="row-main"><span class="row-title">' + Z.esc(a.full_name || 'Unknown') + ' <span class="lvl">L' + x.level + '</span></span>' +
+          '<span class="row-sub">' + Z.esc(a.email || '') + '</span>' +
+          '<span class="row-sub wrap">Referred by ' + Z.esc(b.full_name || 'Unknown') + ' \u00b7 ' + Z.esc(b.email || '') + '</span>' +
+          '<span class="row-sub">' + Z.fmtDate(x.created_at) + (x.validated_at ? ' \u00b7 valid ' + Z.fmtDay(x.validated_at) : '') + '</span></span>' + Z.badge(x.status) + '</div>';
+      }).join('') : Z.empty({ icon: 'users', title: 'No referrals found' });
+      rfm.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="rfmb">Load more</button>';
+      var mb = Z.$('#rfmb', rfm); if (mb) mb.addEventListener('click', function () { Z.busy(mb, true); load(false); });
+    }
+    Z.$('#rfq', body).addEventListener('input', Z.debounce(function (e) { q = e.target.value.trim(); load(true); }, 350));
+    Z.$('[data-rf]', body).parentNode.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-rf]'); if (!c || c.getAttribute('data-rf') === f) return;
+      f = c.getAttribute('data-rf');
+      Z.$$('[data-rf]', body).forEach(function (x) { x.classList.toggle('on', x === c); });
+      load(true);
+    });
+    load(true);
   };
 
   /* ---------------- Transactions ---------------- */

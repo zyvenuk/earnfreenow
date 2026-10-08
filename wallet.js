@@ -30,7 +30,8 @@
 
   /* ---------------- Home ---------------- */
   Z.views.home = async function (el, ctx) {
-    var s = await Z.loadSummary(true);
+    var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings().catch(function () {})]);
+    var s = both[0];
     if (ctx.stale()) return;
     var first = (s.full_name || '').split(' ')[0] || 'there';
     var html = '<section class="page">' +
@@ -39,6 +40,8 @@
     if (s.status === 'suspended') {
       html += '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so earning and payouts are paused. Contact support if you think this is a mistake.</div></div>';
     }
+
+    html += Z.maint.notices(['platform', 'payout']);
 
     html += '<div class="balance-card">' +
       '<span class="bc-label">Available balance</span>' +
@@ -52,6 +55,7 @@
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
 
+    html += Z.followCard();
     html += Z.pwa.cards();
 
     html += Z.slots.html('home_top');

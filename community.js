@@ -106,23 +106,42 @@
     return Z.fmtDay(d);
   }
 
+  /* Bell screen: two tabs.
+       My Mails     : messages meant only for this account (payout updates, personal notes from Zyven)
+       Zyven Alerts : news sent to every user */
+  var NTABS = {
+    mails: { label: 'My Mails', sub: 'Messages about your account.', empty: 'Payout updates and personal messages from Zyven will appear here.' },
+    alerts: { label: 'Zyven Alerts', sub: 'News and updates from Zyven for everyone.', empty: 'Announcements from Zyven will show up here.' }
+  };
+
   Z.views.notifications = async function (el, ctx) {
-    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>Notifications</h2><p class="sub">News and updates from Zyven.</p></div>' +
-      '<button class="btn btn-tonal btn-sm" id="readall" hidden>Mark all read</button></div><div id="nl">' + Z.skel(3, 90) + '</div></section>';
-    var r = await sb.rpc('my_notifications');
+    el.innerHTML = '<section class="page">' + Z.skel(1, 44) + Z.skel(3, 90) + '</section>';
+    var c = await sb.rpc('unread_notification_counts');
     if (ctx.stale()) return;
-    var nl = Z.$('#nl', el);
-    if (r.error) { nl.innerHTML = Z.errorState(); Z.$('[data-retry]', nl).addEventListener('click', function () { Z.route(); }); return; }
-    var items = r.data || [];
-    Z.state.unread = items.filter(function (n) { return !n.is_read; }).length;
-    Z.state.unreadAt = Date.now(); Z.updateBell();
-    if (!items.length) {
-      nl.innerHTML = '<div class="card">' + Z.empty({ icon: 'bell', title: 'No notifications', text: 'Announcements from Zyven will show up here.' }) + '</div>';
-      return;
+    var counts = c.error ? { mails: 0, alerts: 0 } : { mails: c.data.mails || 0, alerts: c.data.alerts || 0 };
+    var tab = ctx.sub === 'alerts' || ctx.sub === 'mails' ? ctx.sub : (counts.mails > 0 ? 'mails' : (counts.alerts > 0 ? 'alerts' : 'mails'));
+    var cache = {};   // tab -> loaded items
+
+    function syncBell() { Z.state.unread = counts.mails + counts.alerts; Z.state.unreadAt = Date.now(); Z.updateBell(); }
+    syncBell();
+
+    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>Notifications</h2><p class="sub" id="nsub"></p></div>' +
+      '<button class="btn btn-tonal btn-sm" id="readall" hidden>Mark all read</button></div>' +
+      '<div class="seg" role="tablist">' + ['mails', 'alerts'].map(function (k) {
+        return '<button class="seg-btn" role="tab" data-t="' + k + '">' + NTABS[k].label + '<i class="seg-count" id="cnt-' + k + '" hidden></i></button>';
+      }).join('') + '</div><div id="nl"></div></section>';
+    var nl = Z.$('#nl', el), all = Z.$('#readall', el);
+
+    function paintTabs() {
+      ['mails', 'alerts'].forEach(function (k) {
+        Z.$('[data-t="' + k + '"]', el).classList.toggle('on', k === tab);
+        var b = Z.$('#cnt-' + k, el); b.hidden = counts[k] < 1; b.textContent = counts[k] > 9 ? '9+' : counts[k];
+      });
+      Z.$('#nsub', el).textContent = NTABS[tab].sub;
+      all.hidden = !(counts[tab] > 0);
     }
-    var all = Z.$('#readall', el);
-    function syncAll() { all.hidden = !items.some(function (n) { return !n.is_read; }); }
-    nl.innerHTML = items.map(function (n) {
+
+    function card(n) {
       var t = Z.ANN[n.type] || Z.ANN.info;
       return '<button class="notif' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '">' +
         '<span class="row-ic ' + t.cls + '">' + Z.icon(t.icon) + '</span>' +
@@ -130,29 +149,69 @@
         (n.priority >= 2 ? '<span class="badge b-rejected">Urgent</span>' : n.priority === 1 ? '<span class="badge b-pending">Important</span>' : '') + '</span>' +
         '<span class="notif-msg">' + Z.esc(n.message) + '</span>' +
         '<span class="notif-time">' + ago(n.created_at) + '</span></span><i class="dot"></i></button>';
-    }).join('');
-    syncAll();
+    }
+
+    async function show(k) {
+      tab = k; paintTabs();
+      if (cache[k]) { draw(); return; }
+      nl.innerHTML = Z.skel(3, 90);
+      var r = await sb.rpc('my_notifications', { p_scope: k });
+      if (ctx.stale() || tab !== k) return;
+      if (r.error) { nl.innerHTML = Z.errorState(); Z.$('[data-retry]', nl).addEventListener('click', function () { show(k); }); return; }
+      cache[k] = r.data || [];
+      counts[k] = cache[k].filter(function (n) { return !n.is_read; }).length;   // exact for what is listed
+      syncBell(); paintTabs(); draw();
+    }
+    function draw() {
+      var items = cache[tab];
+      nl.innerHTML = items.length ? items.map(card).join('')
+        : '<div class="card">' + Z.empty({ icon: tab === 'mails' ? 'mail' : 'bell', title: tab === 'mails' ? 'No mails' : 'No alerts', text: NTABS[tab].empty }) + '</div>';
+    }
+
+    Z.$('.seg', el).addEventListener('click', function (e) {
+      var b = e.target.closest('[data-t]');
+      if (b && b.getAttribute('data-t') !== tab) show(b.getAttribute('data-t'));
+    });
 
     nl.addEventListener('click', function (e) {
       var c = e.target.closest('.notif'); if (!c) return;
       c.classList.toggle('open');
-      var n = items.filter(function (x) { return x.id === c.getAttribute('data-id'); })[0];
+      var k = tab, n = (cache[k] || []).filter(function (x) { return x.id === c.getAttribute('data-id'); })[0];
       if (n && !n.is_read) {
         n.is_read = true; c.classList.remove('unread');
-        Z.state.unread = Math.max(0, (Z.state.unread || 0) - 1); Z.updateBell(); syncAll();
+        counts[k] = Math.max(0, counts[k] - 1); syncBell(); paintTabs();
         sb.rpc('mark_announcement_read', { p_id: n.id }).then(function (res) {
-          if (res.error) { n.is_read = false; c.classList.add('unread'); Z.refreshUnread(true); syncAll(); }
+          if (res.error) { n.is_read = false; counts[k] += 1; c.classList.add('unread'); syncBell(); paintTabs(); }
         });
       }
     });
+
     all.addEventListener('click', function () {
+      var k = tab;
       Z.run(all, async function () {
-        var res = await sb.rpc('mark_all_announcements_read');
+        var res = await sb.rpc('mark_all_announcements_read', { p_scope: k });
         if (res.error) throw res.error;
-        items.forEach(function (n) { n.is_read = true; });
+        (cache[k] || []).forEach(function (n) { n.is_read = true; });
         Z.$$('.notif.unread', el).forEach(function (x) { x.classList.remove('unread'); });
-        Z.state.unread = 0; Z.updateBell(); syncAll();
+        counts[k] = 0; syncBell(); paintTabs();
       });
     });
+
+    show(tab);
+  };
+
+  /* ---------------- Follow Zyven (always visible on Home) ---------------- */
+  Z.followCard = function () {
+    var st = Z.state.settings || {};
+    function row(href, cls, icon, title, text) {
+      if (!href) return '';
+      return '<a class="row follow-row" href="' + Z.esc(href) + '" target="_blank" rel="noopener noreferrer">' +
+        '<span class="sup-ic ' + cls + '">' + Z.icon(icon) + '</span>' +
+        '<span class="row-main"><span class="row-title">' + title + '</span><span class="row-sub">' + text + '</span></span>' +
+        '<span class="btn btn-tonal btn-sm">Follow</span></a>';
+    }
+    var rows = row(st.channel_whatsapp, 'wa', 'chat', 'Zyven on WhatsApp', 'Official channel') +
+               row(st.channel_telegram, 'tg', 'send', 'Zyven on Telegram', 'Official channel');
+    return rows ? '<div class="card follow-card"><div class="follow-card-head"><b>Follow Zyven</b><span>Updates, new ads and announcements first</span></div>' + rows + '</div>' : '';
   };
 })();

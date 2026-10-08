@@ -54,7 +54,8 @@
     var hist = [], histDone = false, histLoading = false, histExpanded = false;
     var method = null;
     var min = Number(st.min_payout);
-    var canRequest = st.payouts_enabled && s.status === 'active';
+    var pBlocked = Z.maint.active('payout');   // payout maintenance: history stays visible, new requests are closed
+    var canRequest = st.payouts_enabled && s.status === 'active' && !pBlocked;
 
     el.innerHTML = '<section class="page">' +
       '<div class="card info-card"><div class="ic-line"><span>Available balance</span><b id="avail">' + Z.money(s.balance) + '</b></div>' +
@@ -62,10 +63,11 @@
       ((Number(st.fee_percent) > 0 || Number(st.fee_fixed) > 0) ? '<div class="ic-line small"><span>Fee</span><b>' +
         [Number(st.fee_percent) > 0 ? Number(st.fee_percent) + '%' : '', Number(st.fee_fixed) > 0 ? Z.money(st.fee_fixed) : ''].filter(Boolean).join(' + ') + '</b></div>' : '') +
       '</div>' +
+      Z.maint.notices(['payout']) +
       (!st.payouts_enabled ? '<div class="alert a-warn">' + Z.icon('alert') + '<div>Payouts are paused right now. Please check back later.</div></div>' : '') +
       (s.status !== 'active' ? '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so payouts are unavailable.</div></div>' : '') +
-      '<div class="section-head"><h3>Request a payout</h3></div>' +
-      '<form class="card form" id="pf" novalidate>' +
+      '<div class="section-head"' + (pBlocked ? ' hidden' : '') + '><h3>Request a payout</h3></div>' +
+      '<form class="card form" id="pf" novalidate' + (pBlocked ? ' hidden' : '') + '>' +
       '<div class="field"><label>Payout method</label><div class="method-grid" id="methods">' +
       ['easypaisa', 'jazzcash'].map(function (k) {
         return '<button type="button" class="method" data-m="' + k + '" aria-pressed="false">' + Z.methodLogo(k, true) + '<span>' + Z.methods[k].name + '</span></button>';

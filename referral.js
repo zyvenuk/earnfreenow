@@ -13,6 +13,7 @@
 
   function refRow(r, need) {
     var valid = r.status === 'valid';
+    var joined = 'Joined ' + Z.fmtDate(r.joined_at);
     var sub1 = valid ? 'Validated ' + Z.fmtDay(r.validated_at) : r.ads_done + '/' + need + ' ads completed' + (r.email_verified ? '' : ' \u00b7 email not verified');
     var sub2 = '';
     if (r.bonus_status === 'locked') sub2 = 'Bonus ' + Z.money(r.bonus_amount) + ' \u00b7 unlocks ' + Z.fmtDay(r.bonus_unlock_at);
@@ -21,7 +22,7 @@
     return '<div class="row ref-row">' +
       '<span class="avatar sm">' + Z.esc((r.display_name || '?').charAt(0).toUpperCase()) + '</span>' +
       '<span class="row-main"><span class="row-title">' + Z.esc(r.display_name) + ' <span class="lvl">L' + r.level + '</span></span>' +
-      '<span class="row-sub">' + sub1 + '</span>' + (sub2 ? '<span class="row-sub">' + sub2 + '</span>' : '') + '</span>' +
+      '<span class="row-sub">' + joined + '</span><span class="row-sub">' + sub1 + '</span>' + (sub2 ? '<span class="row-sub">' + sub2 + '</span>' : '') + '</span>' +
       '<span class="col-end">' + Z.badge(r.status) +
       (valid ? '<span class="amt pos small">' + Z.money(r.commission_earned, { sign: true }) + '</span>' : '') + '</span></div>';
   }
