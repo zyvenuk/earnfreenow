@@ -13,7 +13,8 @@
     referral_bonus: { label: 'Referral bonus (locked)', icon: 'gift', cls: '' },
     referral_unlock_out: { label: 'Moved to Main Wallet', icon: 'refresh', cls: '' },
     referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
-    referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' }
+    referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
+    admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' }
   };
   Z.TX = TX;
 
@@ -38,7 +39,7 @@
       '<h2 class="greet">Hi, ' + Z.esc(first) + '</h2>';
 
     if (s.status === 'suspended') {
-      html += '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so earning and payouts are paused. Contact support if you think this is a mistake.</div></div>';
+      html += '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so earning and payouts are paused. Contact support if you think this is a mistake.' + (s.note ? '<br><b>' + Z.esc(s.note) + '</b>' : '') + '</div></div>';
     }
 
     html += Z.maint.notices(['platform', 'payout']);
@@ -152,6 +153,47 @@
     load(true);
   };
 
+  /* ---------------- Account verification ---------------- */
+  async function verifySheet(btn) {
+    Z.busy(btn, true);
+    var r = await sb.rpc('my_verification');      // live from Supabase Auth
+    Z.busy(btn, false);
+    if (r.error) return Z.toast(Z.errMsg(r.error), 'error');
+    var d = r.data;
+
+    if (d.verified) {   // already done: nothing to do
+      Z.sheet('<div class="follow"><div class="sup-ic big" style="background:var(--pos-soft);color:var(--pos)">' + Z.icon('check') + '</div>' +
+        '<h2>Already verified</h2><p>Your account is verified. Nothing more to do.</p>' +
+        '<div class="summary" style="width:100%;text-align:left"><div class="kv"><span>Email</span><b>' + Z.esc(d.email || '') + '</b></div>' +
+        '<div class="kv"><span>Verified with</span><b>' + (d.google ? 'Google' : 'Email confirmation') + '</b></div>' +
+        (d.verified_at ? '<div class="kv"><span>Since</span><b>' + Z.fmtDay(d.verified_at) + '</b></div>' : '') + '</div>' +
+        '<button class="btn btn-primary btn-block" data-close>Done</button></div>', { center: true });
+      return;
+    }
+
+    var sh = Z.sheet('<h2 class="sheet-title">Verify your account</h2>' +
+      '<p class="sheet-text">Verify your Gmail / Google account to get the Verified badge. Referrals only count once the referred person is verified.</p>' +
+      '<div class="sheet-actions"><button class="btn btn-google btn-block" id="v-google">' + Z.icon('google', 'g') + 'Verify with Google</button>' +
+      (d.email_confirmed ? '' : '<button class="btn btn-tonal btn-block" id="v-mail">' + Z.icon('mail') + 'Send verification email</button>') +
+      '<button class="btn btn-ghost btn-block" data-close>Not now</button></div>');
+    Z.$('#v-google', sh.el).addEventListener('click', function () {
+      var b = this;
+      Z.run(b, async function () {
+        try { sessionStorage.setItem('zyven:linked', '1'); } catch (e) { /* ignore */ }
+        var res = await sb.auth.linkIdentity({ provider: 'google', options: { redirectTo: Z.siteUrl() } });
+        if (res.error) { try { sessionStorage.removeItem('zyven:linked'); } catch (e) { /* ignore */ } throw res.error; }
+      });
+    });
+    var mb = Z.$('#v-mail', sh.el);
+    if (mb) mb.addEventListener('click', function () {
+      Z.run(mb, async function () {
+        var res = await sb.auth.resend({ type: 'signup', email: d.email, options: { emailRedirectTo: Z.siteUrl() } });
+        if (res.error) throw res.error;
+        Z.toast('Verification email sent. Check your inbox.', 'ok'); sh.close();
+      });
+    });
+  }
+
   /* ---------------- Profile ---------------- */
   Z.views.profile = async function (el, ctx) {
     var s = await Z.loadSummary();
@@ -160,12 +202,15 @@
 
     el.innerHTML = '<section class="page">' +
       '<div class="profile-head"><div class="avatar">' + Z.esc(initial) + '</div>' +
-      '<div class="ph-text"><h2 id="pname">' + Z.esc(s.full_name) + '</h2><p>' + Z.esc(s.email) + '</p>' + Z.badge(s.status) + '</div></div>' +
+      '<div class="ph-text"><h2 id="pname">' + Z.esc(s.full_name) + '</h2><p>' + Z.esc(s.email) + '</p><div class="ph-badges">' + Z.verBadge(s.email_verified) + Z.badge(s.status) + '</div></div></div>' +
       '<div class="card">' +
       '<div class="row">' + '<span class="row-ic">' + Z.icon('coin') + '</span><span class="row-main"><span class="row-title">Total earned</span></span><span class="amt">' + Z.money(s.total_earned) + '</span></div>' +
       '<div class="row">' + '<span class="row-ic">' + Z.icon('clock') + '</span><span class="row-main"><span class="row-title">Member since</span></span><span class="amt muted">' + Z.fmtDay(s.created_at) + '</span></div>' +
       '</div>' +
       '<div class="card">' +
+      '<button class="row row-btn" id="verify"><span class="row-ic ' + (s.email_verified ? 'pos' : 'warn') + '">' + Z.icon('shield') + '</span>' +
+      '<span class="row-main"><span class="row-title">Account verification</span><span class="row-sub">' + (s.email_verified ? 'Your Gmail / email is verified' : 'Not verified. Tap to verify') + '</span></span>' +
+      Z.icon('chevron', 'row-chev') + '</button>' +
       '<button class="row row-btn" id="edit-name"><span class="row-ic">' + Z.icon('edit') + '</span><span class="row-main"><span class="row-title">Edit name</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       Z.pwa.profileRows() +
       '<button class="row row-btn" id="change-pw"><span class="row-ic">' + Z.icon('lock') + '</span><span class="row-main"><span class="row-title">Change password</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
@@ -179,6 +224,7 @@
     Z.slots.attach(el, ctx);
 
     Z.pwa.bindProfile(el);
+    Z.$('#verify', el).addEventListener('click', function () { verifySheet(this); });
     Z.$('#logout', el).addEventListener('click', async function () {
       if (await Z.confirm({ title: 'Log out?', text: 'You can log back in any time.', confirm: 'Log out' })) Z.signOut();
     });

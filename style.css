@@ -493,3 +493,16 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .maint-card { padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow: visible; margin-bottom: 4px; }
 .b-ongoing { background: var(--neg-soft); color: var(--neg); }
 .b-ended { background: var(--surface-2); color: var(--muted); }
+
+/* ---------- Google button / verification ---------- */
+.ic.g { stroke: none; }
+.btn-google { background: #fff; color: #1F1F1F; border: 1.5px solid #DADCE0; }
+.btn-google:active:not(:disabled) { background: #F4F5F7; }
+@media (prefers-color-scheme: dark) { .btn-google { background: #1F2230; color: #EDEFF6; border-color: #3A3F52; } .btn-google:active:not(:disabled) { background: #272B3C; } }
+.btn-google.is-loading::after { border-color: var(--line); border-top-color: var(--accent); }
+.or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12.5px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.ph-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge .bi { width: 13px; height: 13px; margin-right: 3px; stroke-width: 2.6; }
+.b-verified { background: var(--pos-soft); color: var(--pos); }
+.b-unverified { background: var(--warn-soft); color: var(--warn); }

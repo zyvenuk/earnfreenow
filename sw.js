@@ -1,10 +1,10 @@
 /* Zyven service worker: installable app shell + push notifications.
    Strategy: network first (so updates always arrive), cache only as an offline fallback.
    Cross-origin requests (Supabase, CDN) are never touched. */
-const CACHE = 'zyven-shell-v3';
+const CACHE = 'zyven-shell-v4';
 const SHELL = ['./', 'index.html', 'style.css', 'manifest.json', 'monogram.png',
   'supabase-init.js', 'utils.js', 'adslots.js', 'auth.js', 'ads.js', 'wallet.js', 'payout.js',
-  'community.js', 'referral.js', 'pwa.js', 'maintenance.js', 'admin.js', 'app.js'];
+  'community.js', 'referral.js', 'pwa.js', 'device.js', 'maintenance.js', 'admin.js', 'app.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

@@ -60,6 +60,11 @@
     reason_required: 'Enter a reason of at least 3 characters.',
     cannot_modify_self: 'You cannot change your own account.',
     not_found: 'That item could not be found.',
+    device_taken: 'This phone already has a Zyven account. Each phone can have only one account, so please log in to your existing account.',
+    'provider is not enabled': 'Google sign-in is not set up yet. Please use email and password.',
+    'Unsupported provider': 'Google sign-in is not set up yet. Please use email and password.',
+    'anual linking is disabled': 'Linking Google is not switched on yet. Please contact support.',
+    'already linked': 'That Google account is already linked to another Zyven account.',
     maintenance_platform: 'Zyven is under maintenance right now. Please try again later.',
     maintenance_payout: 'Payouts are paused for maintenance right now. Please try again later.',
     ad_not_loaded: 'The ad was not shown. Turn off your ad blocker or Private DNS, then try again.',
@@ -194,6 +199,10 @@
   var BADGES = {
     pending: 'Pending', processing: 'Processing', paid: 'Paid', rejected: 'Rejected', cancelled: 'Cancelled',
     active: 'Active', suspended: 'Suspended', inactive: 'Inactive', scheduled: 'Scheduled', expired: 'Expired', live: 'Live', off: 'Off', nocode: 'No code', valid: 'Valid', invalid: 'Invalid', ongoing: 'In progress', ended: 'Ended', locked: 'Locked', transferred: 'Unlocked'
+  };
+  // Profile verification badge (check icon when verified)
+  Z.verBadge = function (v) {
+    return '<span class="badge ' + (v ? 'b-verified' : 'b-unverified') + '">' + (v ? Z.icon('check', 'bi') : '') + (v ? 'Verified' : 'Unverified') + '</span>';
   };
   Z.badge = function (s) { return '<span class="badge b-' + s + '">' + (BADGES[s] || Z.esc(s)) + '</span>'; };
 

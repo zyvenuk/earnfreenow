@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['referrals', 'Referrals', 'gift'],
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
     ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
@@ -62,7 +62,7 @@
     async function load(reset) {
       if (loading) return; loading = true;
       if (reset) { items = []; ul.innerHTML = Z.skel(4, 60); um.innerHTML = ''; }
-      var qq = sb.from('profiles').select('id,email,full_name,status,created_at,wallets(balance,total_earned,total_paid_out)')
+      var qq = sb.from('profiles').select('id,email,full_name,status,email_verified,note,created_at,wallets(balance,total_earned,total_paid_out)')
         .order('created_at', { ascending: false }).range(items.length, items.length + PAGE - 1);
       if (q) { var c = q.replace(/[,()%*\\]/g, ' ').trim(); if (c) qq = qq.or('email.ilike.%' + c + '%,full_name.ilike.%' + c + '%'); }
       var r = await qq; loading = false;
@@ -73,7 +73,7 @@
         var w = relation(u.wallets) || {};
         return '<button class="row row-btn" data-u="' + u.id + '"><span class="avatar sm">' + Z.esc((u.full_name || '?').charAt(0).toUpperCase()) + '</span>' +
           '<span class="row-main"><span class="row-title">' + Z.esc(u.full_name) + '</span><span class="row-sub">' + Z.esc(u.email) + '</span></span>' +
-          '<span class="col-end"><span class="amt">' + Z.money(w.balance) + '</span>' + (u.status !== 'active' ? Z.badge(u.status) : '') + '</span></button>';
+          '<span class="col-end"><span class="amt">' + Z.money(w.balance) + '</span>' + (u.status !== 'active' ? Z.badge(u.status) : '') + (!u.email_verified ? Z.verBadge(false) : '') + '</span></button>';
       }).join('') : Z.empty({ icon: 'users', title: 'No users found' });
       um.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="umb">Load more</button>';
       var b = Z.$('#umb', um); if (b) b.addEventListener('click', function () { Z.busy(b, true); load(false); });
@@ -86,6 +86,18 @@
     });
     load(true);
   };
+
+  // Phones linked to this account (one phone = one account); shows when a phone model fingerprint is shared
+  function deviceSection(devs) {
+    var h = '<h3 class="mini-title">Phones (' + devs.length + ')</h3>';
+    return h + (devs.length ? '<div class="card flat">' + devs.map(function (d) {
+      return '<div class="row"><span class="row-main"><span class="row-title">' + Z.esc(d.device_short) + '\u2026</span>' +
+        '<span class="row-sub wrap">' + Z.esc((d.user_agent || '').slice(0, 70)) + '</span>' +
+        '<span class="row-sub">First ' + Z.fmtDate(d.first_seen) + ' \u00b7 last ' + Z.fmtDate(d.last_seen) + '</span>' +
+        (d.same_fp_accounts > 0 ? '<span class="row-sub" style="color:var(--warn)">Similar phone seen on ' + d.same_fp_accounts + ' other account' + (d.same_fp_accounts > 1 ? 's' : '') + '</span>' : '') +
+        '</span></div>';
+    }).join('') + '</div>' : '<p class="muted small">No phone linked yet.</p>');
+  }
 
   // Referrals of one user: who referred them, and everyone they referred (name + email + date)
   function refSection(made, by) {
@@ -108,8 +120,9 @@
     var w = relation(u.wallets) || {};
     var sh = Z.sheet('<h2 class="sheet-title">' + Z.esc(u.full_name) + '</h2>' +
       '<p class="muted small">' + Z.esc(u.email) + '</p>' +
-      '<div class="summary">' + lineKV('Status', Z.badge(u.status)) + lineKV('Balance', Z.money(w.balance)) +
+      '<div class="summary">' + lineKV('Status', Z.badge(u.status)) + lineKV('Verification', Z.verBadge(u.email_verified)) + lineKV('Balance', Z.money(w.balance)) +
       lineKV('Total earned', Z.money(w.total_earned)) + lineKV('Paid out', Z.money(w.total_paid_out)) + lineKV('Joined', Z.fmtDay(u.created_at)) + '</div>' +
+      (u.note ? '<div class="alert a-warn" style="margin-top:10px">' + Z.icon('alert') + '<div>' + Z.esc(u.note) + '</div></div>' : '') +
       '<div class="sheet-actions row-actions">' +
       '<button class="btn btn-tonal" id="adj">Adjust balance</button>' +
       '<button class="btn ' + (u.status === 'active' ? 'btn-danger-ghost' : 'btn-primary') + '" id="tg">' + (u.status === 'active' ? 'Suspend' : 'Reactivate') + '</button></div>' +
@@ -119,7 +132,8 @@
       sb.from('transactions').select('id,type,amount,note,created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(8),
       sb.from('payout_requests').select('id,method,amount,status,created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(5),
       sb.from('referrals').select('id,level,status,created_at,validated_at,referred:profiles!referrals_referred_id_fkey(full_name,email)').eq('referrer_id', u.id).order('created_at', { ascending: false }).limit(100),
-      sb.from('referrals').select('id,level,status,created_at,referrer:profiles!referrals_referrer_id_fkey(full_name,email)').eq('referred_id', u.id).order('level')
+      sb.from('referrals').select('id,level,status,created_at,referrer:profiles!referrals_referrer_id_fkey(full_name,email)').eq('referred_id', u.id).order('level'),
+      sb.rpc('admin_user_devices', { p_user: u.id })
     ]).then(function (res) {
       var box = Z.$('#ua', sh.el); if (!box) return;
       if (res[0].error) { box.innerHTML = '<p class="muted small">Could not load activity.</p>'; return; }
@@ -128,7 +142,8 @@
         (pays.length ? '<h3 class="mini-title">Payout requests</h3><div class="card flat">' + pays.map(function (p) {
           return '<div class="row"><span class="row-main"><span class="row-title">' + (Z.methods[p.method] || {}).name + ' \u00b7 ' + Z.money(p.amount) + '</span><span class="row-sub">' + Z.fmtDate(p.created_at) + '</span></span>' + Z.badge(p.status) + '</div>';
         }).join('') + '</div>' : '') +
-        (!res[2].error && !res[3].error ? refSection(res[2].data || [], res[3].data || []) : '');
+        (!res[2].error && !res[3].error ? refSection(res[2].data || [], res[3].data || []) : '') +
+        (!res[4].error ? deviceSection(res[4].data || []) : '');
     });
 
     Z.$('#tg', sh.el).addEventListener('click', async function () {
@@ -566,6 +581,71 @@
       });
     });
   }
+
+  /* ---------------- Rewards: credit every user in one tap ---------------- */
+  var AUD = [['active', 'All active users'], ['verified', 'Verified users only']];
+
+  SECTIONS.rewards = async function (body, ctx) {
+    var h = await sb.from('bulk_rewards').select('*').order('created_at', { ascending: false }).limit(10);
+    if (ctx.stale()) return;
+    var hist = h.data || [];
+    body.innerHTML = '<div class="page-head"><div><h2>Reward all users</h2><p class="sub">Credit the same reward to every account at once. Suspended accounts and your own are skipped.</p></div></div>' +
+      '<form class="card form" id="bf" novalidate>' +
+      Z.field({ id: 'ba', label: 'Reward per user', placeholder: '0.00', attrs: 'inputmode="decimal"', hint: 'Up to ' + Z.money(10000) + ' per user.' }) +
+      Z.field({ id: 'bn', label: 'Message (shown to users)', value: 'Reward from Zyven', attrs: 'maxlength="120"' }) +
+      Z.field({ id: 'bw', label: 'Who gets it', type: 'select', value: 'active', options: AUD }) +
+      Z.switchEl('bm', true, 'Send each user a mail (My Mails)') +
+      '<div class="summary" id="bsum"></div><div id="berr"></div>' +
+      '<button class="btn btn-primary btn-block" type="submit" id="bgo">Send reward</button></form>' +
+      '<div class="section-head"><h3>Recent rewards</h3></div><div class="card" id="bh">' + (hist.length ? hist.map(function (b) {
+        return '<div class="row"><span class="row-ic pos">' + Z.icon('gift') + '</span><span class="row-main"><span class="row-title">' + Z.money(b.amount) + ' \u00d7 ' + b.recipients + ' users</span>' +
+          '<span class="row-sub">' + Z.esc(b.note) + ' \u00b7 ' + (b.audience === 'verified' ? 'Verified only' : 'All active') + '</span><span class="row-sub">' + Z.fmtDate(b.created_at) + '</span></span>' +
+          '<span class="amt">' + Z.money(b.total) + '</span></div>';
+      }).join('') : Z.empty({ icon: 'gift', title: 'No rewards sent yet' })) + '</div>';
+
+    var amtEl = Z.$('#ba', body), noteEl = Z.$('#bn', body), audEl = Z.$('#bw', body), sum = Z.$('#bsum', body);
+    var reqId = null, lastKey = '', count = null;
+
+    async function preview() {
+      var r = await sb.rpc('admin_bulk_preview', { p_audience: audEl.value });
+      if (ctx.stale()) return;
+      count = r.error ? null : Number(r.data.recipients);
+      paint();
+    }
+    function paint() {
+      var a = parseFloat(amtEl.value);
+      sum.innerHTML = count === null ? '' : '<div class="kv"><span>Users who will receive it</span><b>' + count + '</b></div>' +
+        (isFinite(a) && a > 0 ? '<div class="kv total"><span>Total to credit</span><b>' + Z.money(a * count) + '</b></div>' : '');
+    }
+    amtEl.addEventListener('input', paint);
+    audEl.addEventListener('change', preview);
+    preview();
+
+    Z.$('#bf', body).addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var err = Z.$('#berr', body), a = Math.round(parseFloat(amtEl.value) * 100) / 100, note = noteEl.value.trim();
+      if (!isFinite(a) || a <= 0 || a > 10000) return Z.formError(err, 'Enter an amount above zero (up to ' + Z.money(10000) + ').');
+      if (note.length < 3) return Z.formError(err, 'Enter a short message of at least 3 characters.');
+      if (!count) return Z.formError(err, 'No users match this selection.');
+      Z.formError(err, '');
+      var ok = await Z.confirm({
+        title: 'Credit ' + Z.money(a) + ' to ' + count + ' users?',
+        html: '<div class="summary"><div class="kv"><span>Per user</span><b>' + Z.money(a) + '</b></div><div class="kv"><span>Users</span><b>' + count + '</b></div>' +
+          '<div class="kv total"><span>Total</span><b>' + Z.money(a * count) + '</b></div></div><p class="muted small">This cannot be undone. A double tap will not pay twice.</p>',
+        confirm: 'Send reward'
+      });
+      if (!ok) return;
+      var key = [a, note, audEl.value, Z.$('#bm', body).checked].join('|');
+      if (key !== lastKey || !reqId) { reqId = (crypto.randomUUID ? crypto.randomUUID() : null); lastKey = key; }   // same id on a retry = never paid twice
+      Z.run(Z.$('#bgo', body), async function () {
+        var r = await sb.rpc('admin_bulk_reward', { p_request_id: reqId, p_amount: a, p_note: note, p_audience: audEl.value, p_notify: Z.$('#bm', body).checked });
+        if (r.error) throw r.error;
+        reqId = null; lastKey = '';
+        Z.toast(r.data.duplicate ? 'Already sent earlier' : 'Sent ' + Z.money(a) + ' to ' + r.data.recipients + ' users', 'ok');
+        Z.route();
+      }, err);
+    });
+  };
 
   /* ---------------- Referrals ---------------- */
   SECTIONS.referrals = async function (body, ctx) {

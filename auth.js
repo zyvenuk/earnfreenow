@@ -8,12 +8,34 @@
       '<div class="auth-head"><img src="monogram.png" alt="Zyven" class="auth-logo" onerror="this.style.display=\'none\'">' +
       '<h1>' + title + '</h1><p>' + sub + '</p></div>' + body + '</section>';
   }
+  // "Continue with Google" button + divider (placed at the top of the login / signup card)
+  function googleBlock(label) {
+    return '<button class="btn btn-google btn-block" type="button" id="goog">' + Z.icon('google', 'g') + label + '</button>' +
+      '<div class="or"><span>or use email</span></div>';
+  }
+  function bindGoogle(el, signup, errBox) {
+    var b = Z.$('#goog', el);
+    if (!b) return;
+    b.addEventListener('click', function () {
+      Z.run(b, async function () {
+        if (signup) {
+          var ref = ((Z.$('#ref', el) || {}).value || '').trim().toUpperCase();
+          if (/^[A-Z0-9]{4,12}$/.test(ref)) { try { localStorage.setItem('zyven:ref', ref); } catch (e) { /* ignore */ } }
+          if (!(await Z.device.available())) throw { message: 'device_taken' };   // one phone, one account
+        }
+        try { sessionStorage.setItem('zyven:fresh', '1'); } catch (e) { /* ignore */ }   // survives the trip to Google and back
+        var r = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: Z.siteUrl(), queryParams: { prompt: 'select_account' } } });
+        if (r.error) throw r.error;
+      }, errBox);
+    });
+  }
+
   function storedRef() { try { return localStorage.getItem('zyven:ref') || ''; } catch (e) { return ''; } }
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 
   Z.views.login = function (el) {
     el.innerHTML = shell('Welcome back', 'Log in to watch ads and track your rewards.',
-      '<form class="card form" id="f" novalidate>' +
+      '<form class="card form" id="f" novalidate>' + googleBlock('Continue with Google') +
       Z.field({ id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', attrs: 'autocomplete="email" inputmode="email" autocapitalize="off" required' }) +
       Z.field({ id: 'pw', label: 'Password', type: 'password', placeholder: 'Your password', attrs: 'autocomplete="current-password" required' }) +
       '<div id="err"></div>' +
@@ -23,6 +45,7 @@
       '<p class="auth-alt">New to Zyven? <a data-go="/signup" class="link">Create an account</a></p>');
 
     var f = Z.$('#f', el), err = Z.$('#err', el);
+    bindGoogle(el, false, err);
     f.addEventListener('submit', function (e) {
       e.preventDefault();
       var email = Z.$('#email', el).value.trim(), pw = Z.$('#pw', el).value;
@@ -47,7 +70,7 @@
 
   Z.views.signup = function (el) {
     el.innerHTML = shell('Create your account', 'Start earning rewards for watching ads.',
-      '<form class="card form" id="f" novalidate>' +
+      '<form class="card form" id="f" novalidate>' + googleBlock('Sign up with Google') +
       Z.field({ id: 'name', label: 'Full name', placeholder: 'Your name', attrs: 'autocomplete="name" maxlength="60" required' }) +
       Z.field({ id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', attrs: 'autocomplete="email" inputmode="email" autocapitalize="off" required' }) +
       Z.field({ id: 'pw', label: 'Password', type: 'password', placeholder: 'At least 8 characters', attrs: 'autocomplete="new-password" required' }) +
@@ -58,6 +81,7 @@
       '<p class="auth-alt">Already have an account? <a data-go="/login" class="link">Log in</a></p>');
 
     var f = Z.$('#f', el), err = Z.$('#err', el);
+    bindGoogle(el, true, err);
     f.addEventListener('submit', function (e) {
       e.preventDefault();
       var name = Z.$('#name', el).value.trim(), email = Z.$('#email', el).value.trim(), pw = Z.$('#pw', el).value;
@@ -68,6 +92,7 @@
       if (ref && !/^[A-Z0-9]{4,12}$/.test(ref)) return Z.formError(err, 'That referral code does not look right.');
       Z.formError(err, '');
       Z.run(Z.$('button[type=submit]', f), async function () {
+        if (!(await Z.device.available())) throw { message: 'device_taken' };   // one phone, one account
         var meta = { full_name: name };
         if (ref) meta.referral_code = ref;
         var r = await sb.auth.signUp({ email: email, password: pw, options: { data: meta, emailRedirectTo: Z.siteUrl() } });

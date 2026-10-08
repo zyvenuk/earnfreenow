@@ -129,12 +129,22 @@
       return; // token refresh / tab refocus: nothing to redo
     }
     Z.state.session = session; Z.state.user = session.user;
-    try { localStorage.removeItem('zyven:ref'); } catch (e) { /* ignore */ }
+    var pendingRef = null;   // referral code saved before a Google signup (it cannot travel through OAuth)
+    try { pendingRef = localStorage.getItem('zyven:ref'); localStorage.removeItem('zyven:ref'); } catch (e) { /* ignore */ }
+    try { if (sessionStorage.getItem('zyven:fresh')) { Z.freshLogin = true; sessionStorage.removeItem('zyven:fresh'); } } catch (e) { /* ignore */ }
     try { await loadContext(); }
     catch (e) { console.error(e); Z.toast('Something went wrong. Please try again.', 'error'); }
+    try {
+      if (pendingRef) await sb.rpc('claim_referral', { p_code: pendingRef });   // only works for a brand-new account with no referrer
+      var dev = await Z.device.register();                                      // one phone, one account
+      if (dev && dev.ok === false && dev.suspended) Z.toast(Z.errMsg({ message: 'device_taken' }), 'error');
+    } catch (e) { console.warn('[Zyven] post-login checks', e); }
     Z.ready = true; hideSplash();
     if (/^#\/(login|signup|forgot|verify|reset)?$/.test(location.hash) || !location.hash) location.hash = '#/home';
     if (/type=signup/.test(Z.bootHash) && !Z.welcomed) { Z.welcomed = true; Z.toast('Email verified. Welcome to Zyven!', 'ok'); }
+    try {   // back from linking a Google account
+      if (sessionStorage.getItem('zyven:linked')) { sessionStorage.removeItem('zyven:linked'); location.hash = '#/profile'; Z.toast('Google account linked', 'ok'); }
+    } catch (e) { /* ignore */ }
     Z.route();
     setTimeout(function () { if (Z.push && Z.state.user) Z.push.sync(); }, 1500);
     if (Z.freshLogin) {
@@ -171,7 +181,10 @@
 
     // Expired / invalid email links come back as #error=...
     if (/error_description|error_code/.test(Z.bootHash)) {
-      Z.toast('That link is invalid or has expired. Please request a new one.', 'error');
+      var bh = decodeURIComponent(Z.bootHash.replace(/\+/g, ' '));
+      Z.toast(/already.*linked/i.test(bh) ? 'That Google account is already linked to another Zyven account.'
+        : /provider|oauth|identity|access_denied/i.test(bh) ? 'Google sign-in did not complete. Please try again or use email and password.'
+        : 'That link is invalid or has expired. Please request a new one.', 'error');
       history.replaceState(null, '', location.pathname + location.search);
     }
 
