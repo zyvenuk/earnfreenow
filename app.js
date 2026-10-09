@@ -66,6 +66,7 @@
     if (!Z.state.user && !Z.recovery && AUTH_ROUTES.indexOf(root) === -1) { history.replaceState(null, '', '#/' + name); Z.refFromLink = false; }
 
     Z.currentRoute = name;
+    Z.online.release();   // the admin's presence listener lives only while the dashboard is open
     var myTok = ++tok;
     var ctx = { sub: sub, stale: function () { return myTok !== tok; } };
     chrome(name, mode);
@@ -118,6 +119,7 @@
     if (!session) {
       var hadUser = !!Z.state.user;
       var hadPageScript = Z.slots.pageInjected;
+      Z.online.stop();
       resetState();
       Z.ready = true; hideSplash();
       if (hadUser && hadPageScript) { location.hash = '#/login'; return location.reload(); }
@@ -147,6 +149,7 @@
     } catch (e) { /* ignore */ }
     Z.route();
     setTimeout(function () { if (Z.push && Z.state.user) Z.push.sync(); }, 1500);
+    Z.online.start();   // users only; the admin account never announces itself
     if (Z.freshLogin) {
       Z.freshLogin = false;
       setTimeout(function () { if (Z.state.user && !Z.recovery) Z.maybeShowFollowPopup(); }, 500);

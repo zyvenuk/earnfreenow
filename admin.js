@@ -41,7 +41,7 @@
     function stat(label, value, sub, go) {
       return '<div class="stat"' + (go ? ' data-go="' + go + '" role="link"' : '') + '><span>' + label + '</span><b>' + value + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>';
     }
-    body.innerHTML = Z.maint.adminNotice() + '<div class="stat-grid">' +
+    body.innerHTML = Z.maint.adminNotice() + '<div class="online-line" role="status">Online Users: <b id="online-n">0</b></div><div class="stat-grid">' +
       stat('Users', d.users, d.new_users_today + ' new today', '/admin/users') +
       stat('Active ads', d.active_ads, '', '/admin/ads') +
       stat('Pending payouts', d.pending_payouts, d.processing_payouts + ' processing', '/admin/payouts') +
@@ -50,6 +50,7 @@
       stat('Rewards today', Z.money(d.today_rewards), '') +
       stat('Total rewards', Z.money(d.total_rewards), '') +
       stat('Total paid out', Z.money(d.total_paid), '') + '</div>';
+    Z.online.watch(function (n) { var el = Z.$('#online-n', body); if (el) el.textContent = n; });   // Presence events only, no polling
   };
 
   /* ---------------- Users ---------------- */

@@ -510,3 +510,7 @@ body[data-mode="admin"] #view { max-width: 920px; }
 /* ---------- Update bar / build line ---------- */
 #update-bar { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + var(--safe-b) + 12px); z-index: 95; max-width: 460px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 16px; background: #1E2130; color: #fff; border-radius: 14px; font-size: 14px; font-weight: 550; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
 .build-line { text-align: center; color: var(--faint); font-size: 12px; margin: 2px 0; }
+
+/* ---------- Admin: online users ---------- */
+.online-line { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+.online-line b { color: var(--text); font-variant-numeric: tabular-nums; margin-left: 2px; }
