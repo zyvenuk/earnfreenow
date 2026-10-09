@@ -219,6 +219,7 @@
       (Z.state.isAdmin ? '<button class="row row-btn" data-go="/admin"><span class="row-ic acc">' + Z.icon('shield') + '</span><span class="row-main"><span class="row-title">Admin panel</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
       '</div>' +
       Z.slots.html('profile_bottom') +
+      '<p class="build-line">Zyven \u00b7 build ' + Z.esc(Z.BUILD) + '</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="logout">' + Z.icon('logout') + 'Log out</button>' +
       '</section>';
     Z.slots.attach(el, ctx);

@@ -167,11 +167,46 @@
     } catch (e) { /* storage blocked: referral code just won't be prefilled */ }
   }
 
+  /* ---- New version detection: an old cached copy of the app must never keep running ---- */
+  Z.BUILD = document.documentElement.getAttribute('data-build') || '';
+  var bootAt = Date.now(), updChecked = 0;
+  Z.reloadFresh = async function () {
+    try {
+      var ks = await caches.keys(); await Promise.all(ks.map(function (k) { return caches.delete(k); }));
+      var reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.update();
+    } catch (e) { /* ignore */ }
+    location.reload();
+  };
+  function showUpdate() {
+    if (Z.$('#update-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.innerHTML = '<span>A new version of Zyven is ready.</span><button class="btn btn-primary btn-sm" type="button">Update</button>';
+    bar.querySelector('button').addEventListener('click', Z.reloadFresh);
+    document.body.appendChild(bar);
+  }
+  Z.checkUpdate = async function (force) {
+    if (!Z.BUILD || (!force && Date.now() - updChecked < 5 * 60 * 1000)) return;
+    updChecked = Date.now();
+    try {
+      var r = await fetch(location.pathname + '?cb=' + Date.now(), { cache: 'no-store' });
+      var m = /data-build="([^"]+)"/.exec(await r.text());
+      if (!m || m[1] === Z.BUILD) return;
+      var again = false; try { again = !!sessionStorage.getItem('zyven:autoreload'); } catch (e) { /* ignore */ }
+      if (!again && Date.now() - bootAt < 10000 && !(Z.viewer && Z.viewer.isOpen())) {   // just opened: refresh right away, once
+        try { sessionStorage.setItem('zyven:autoreload', '1'); } catch (e) { /* ignore */ }
+        Z.reloadFresh();
+      } else showUpdate();
+    } catch (e) { /* offline: try later */ }
+  };
+
   var booted = false;
   function boot() {
     if (booted) return; booted = true;
     captureRef();
     window.addEventListener('hashchange', Z.route);
+    setTimeout(function () { Z.checkUpdate(true); }, 2500);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') Z.checkUpdate(); });
     document.addEventListener('visibilitychange', function () {   // coming back to the app: is maintenance different now?
       if (document.visibilityState === 'visible' && Z.ready && Z.maint.data && Date.now() - Z.maint.at > 30000) {
         Z.maint.refresh(true).then(function (ch) { if (ch) Z.route(); });

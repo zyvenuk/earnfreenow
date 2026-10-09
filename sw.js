@@ -1,7 +1,7 @@
 /* Zyven service worker: installable app shell + push notifications.
    Strategy: network first (so updates always arrive), cache only as an offline fallback.
    Cross-origin requests (Supabase, CDN) are never touched. */
-const CACHE = 'zyven-shell-v4';
+const CACHE = 'zyven-shell-v5';
 const SHELL = ['./', 'index.html', 'style.css', 'manifest.json', 'monogram.png',
   'supabase-init.js', 'utils.js', 'adslots.js', 'auth.js', 'ads.js', 'wallet.js', 'payout.js',
   'community.js', 'referral.js', 'pwa.js', 'device.js', 'maintenance.js', 'admin.js', 'app.js'];
@@ -35,7 +35,7 @@ self.addEventListener('fetch', (e) => {
         if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
       })
-      .catch(() => caches.match(req).then((r) => r || (req.mode === 'navigate' ? caches.match('index.html') : Response.error())))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || (req.mode === 'navigate' ? caches.match('index.html', { ignoreSearch: true }) : Response.error())))
   );
 });
 

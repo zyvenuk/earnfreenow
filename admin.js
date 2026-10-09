@@ -787,6 +787,7 @@
       Z.field({ id: 'mp', label: 'Minimum payout', value: s.min_payout, attrs: 'inputmode="decimal"' }) +
       '<div class="two">' + Z.field({ id: 'fp', label: 'Fee percent', value: s.fee_percent, attrs: 'inputmode="decimal"' }) +
       Z.field({ id: 'ff', label: 'Fixed fee', value: s.fee_fixed, attrs: 'inputmode="decimal"' }) + '</div>' +
+      Z.field({ id: 'og', label: 'Direct link loading allowance (seconds)', value: s.offer_grace_seconds, attrs: 'inputmode="numeric"', hint: 'Smart links take a few seconds to load. This is added to the task\u2019s watch time for Direct link ads (default 5), so users see e.g. 20 s for a 15 s task.' }) +
       Z.field({ id: 'pn', label: 'Payout notice', type: 'textarea', rows: 3, value: s.payout_notice, hint: 'Shown on the Payout screen.' }) +
       Z.switchEl('pe', s.payouts_enabled, 'Payouts enabled') +
       '<div id="serr"></div><button class="btn btn-primary btn-block" type="submit">Save settings</button></form>' +
@@ -803,8 +804,10 @@
       var p = {
         currency_symbol: Z.$('#cs', body).value.trim(), min_payout: parseFloat(Z.$('#mp', body).value),
         fee_percent: parseFloat(Z.$('#fp', body).value), fee_fixed: parseFloat(Z.$('#ff', body).value),
-        payout_notice: Z.$('#pn', body).value.trim(), payouts_enabled: Z.$('#pe', body).checked
+        payout_notice: Z.$('#pn', body).value.trim(), payouts_enabled: Z.$('#pe', body).checked,
+        offer_grace_seconds: parseInt(Z.$('#og', body).value, 10)
       };
+      if (!isFinite(p.offer_grace_seconds) || p.offer_grace_seconds < 0 || p.offer_grace_seconds > 30) return Z.formError(Z.$('#serr', body), 'Loading allowance must be 0 to 30 seconds.');
       var err = Z.$('#serr', body);
       if (!p.currency_symbol) return Z.formError(err, 'Enter a currency symbol.');
       if (!isFinite(p.min_payout) || p.min_payout <= 0) return Z.formError(err, 'Minimum payout must be above zero.');

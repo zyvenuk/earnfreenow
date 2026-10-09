@@ -92,10 +92,13 @@
     me.onVis = function () { if (cur !== me) return; if (document.visibilityState === 'hidden') awayStart(); else awayEnd(); };
     me.onBlur = function () { if (cur === me && me.s && me.s.ad_type === 'direct_link') awayStart(); };
     me.onFocus = function () { if (cur === me) awayEnd(); };
+    me.onTap = function () { if (cur === me) awayEnd(); };   // any tap on this page proves the user is back
     window.addEventListener('popstate', me.onPop);
     document.addEventListener('visibilitychange', me.onVis);
     window.addEventListener('blur', me.onBlur);
     window.addEventListener('focus', me.onFocus);
+    window.addEventListener('pageshow', me.onFocus);
+    wrap.addEventListener('pointerdown', me.onTap, true);
 
     var r = await sb.rpc('start_ad', { p_ad_id: ad.id });
     if (cur !== me) return; // closed while starting
@@ -218,7 +221,7 @@
     var me = cur, s = me.s;
     Z.$('#vbody', me.wrap).insertAdjacentHTML('beforeend',
       '<div class="offer"><div class="offer-ic">' + Z.icon('external') + '</div>' +
-      '<h3>Open the offer</h3><p>Tap the button, then stay on the offer page for <b>' + s.required_seconds + ' seconds</b>. ' +
+      '<h3>Open the offer</h3><p>Tap the button, then stay on the offer page for <b>' + s.required_seconds + ' seconds</b> (this includes the time the page takes to load). ' +
       'When the time is up, come back here to claim your reward.</p>' +
       '<p class="offer-warn">If you come back early, the timer restarts.</p>' +
       '<button class="btn btn-tonal" id="open-offer" disabled>Open offer</button></div>');
@@ -251,10 +254,28 @@
   }
 
   // The page went to the background (user is on the offer / another app / another tab)
+  // Tell the server, at the moment of leaving, that the user went to the offer. The server keeps its own clock.
+  // keepalive lets the request finish even while the page goes to the background.
+  function sendLeft(viewId) {
+    var tok = Z.state.session && Z.state.session.access_token;
+    try {
+      if (tok && window.fetch) {
+        fetch(Z.SUPABASE_URL + '/rest/v1/rpc/ad_offer_left', {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'application/json', apikey: Z.SUPABASE_KEY, Authorization: 'Bearer ' + tok },
+          body: JSON.stringify({ p_view_id: viewId })
+        }).catch(function () { /* backup below */ });
+      }
+    } catch (e) { /* ignore */ }
+    sb.rpc('ad_offer_left', { p_view_id: viewId }).then(function () {}, function () {});   // backup; the server only keeps the first one
+  }
+
   function awayStart() {
     var me = cur;
     if (!me || !me.s) return;
-    if (me.s.ad_type === 'direct_link') { if (me.offerOpened && !me.ready && !me.hiddenAt) me.hiddenAt = Date.now(); }
+    if (me.s.ad_type === 'direct_link') {
+      if (me.offerOpened && !me.ready && !me.hiddenAt) { me.hiddenAt = Date.now(); sendLeft(me.s.view_id); }
+    }
     else if (document.visibilityState === 'hidden' && !me.leftAt) me.leftAt = Date.now();
   }
   function awayEnd() {
@@ -271,13 +292,12 @@
     restart('You left the ad, so the timer restarted. Watch it until the end.');
   }
 
+  // Back from the offer. The server measures the time away from its own clock: the browser cannot claim a number.
   async function returnDirect() {
     var me = cur, s = me.s;
     if (!me.offerOpened || !me.hiddenAt || me.ready || me.claimed || me.restarting) return;
-    var end = me.closedAt || Date.now();
-    var away = Math.max(0, (end - me.hiddenAt) / 1000);
     me.hiddenAt = null;
-    var r = await sb.rpc('ad_offer_back', { p_view_id: s.view_id, p_away: Math.round(away * 10) / 10 });
+    var r = await sb.rpc('ad_offer_back', { p_view_id: s.view_id });
     if (cur !== me || me.s !== s) return;
     if (r.error) return restart('Something went wrong. Open the offer again and stay on it for the full time.');
     if (r.data && r.data.ok) {
@@ -286,7 +306,10 @@
       var ob = Z.$('#open-offer', me.wrap); if (ob) ob.hidden = true;
       tick();
     } else {
-      restart('You came back after ' + Math.floor(away) + 's. Open the offer again and stay on it for the full ' + s.required_seconds + ' seconds.');
+      var away = Math.floor(Number(r.data && r.data.away) || 0);
+      restart(away > 0
+        ? 'You came back after ' + away + 's. Open the offer again and stay on it for the full ' + s.required_seconds + ' seconds.'
+        : 'We could not confirm you were on the offer. Open it again and stay on it for the full ' + s.required_seconds + ' seconds.');
     }
   }
 
@@ -302,10 +325,8 @@
     if (me.failed) {
       text = 'Ad not shown';
     } else if (s.ad_type === 'direct_link') {
-      // best effort: notice if the offer tab was closed while the user was away
-      if (me.offerOpened && !me.ready && me.hiddenAt && !me.closedAt && me.offerWin) {
-        try { if (me.offerWin.closed) me.closedAt = Date.now(); } catch (e) { /* ignore */ }
-      }
+      // safety net: if the browser missed the "came back" event, a visible and focused page still counts as back
+      if (me.offerOpened && !me.ready && me.hiddenAt && !me.restarting && document.visibilityState === 'visible' && document.hasFocus()) returnDirect();
       if (me.ready) { canClaim = true; pct = 100; text = 'Reward ready'; }
       else if (!me.loaded) text = 'Checking offer\u2026';
       else if (me.offerOpened) text = 'Stay on the offer for ' + req + 's, then come back';
@@ -386,6 +407,7 @@
     document.removeEventListener('visibilitychange', me.onVis);
     window.removeEventListener('blur', me.onBlur);
     window.removeEventListener('focus', me.onFocus);
+    window.removeEventListener('pageshow', me.onFocus);
     // Unfinished ad = void on the server too, so it can never be claimed later.
     if (!me.claimed && me.s) sb.rpc('cancel_ad', { p_view_id: me.s.view_id }).then(function () {}, function () {});
     me.wrap.remove();

@@ -10,8 +10,8 @@
   }
   // "Continue with Google" button + divider (placed at the top of the login / signup card)
   function googleBlock(label) {
-    return '<button class="btn btn-google btn-block" type="button" id="goog">' + Z.icon('google', 'g') + label + '</button>' +
-      '<div class="or"><span>or use email</span></div>';
+    return '<div class="or"><span>or</span></div>' +
+      '<button class="btn btn-google btn-block" type="button" id="goog">' + Z.icon('google', 'g') + label + '</button>';
   }
   function bindGoogle(el, signup, errBox) {
     var b = Z.$('#goog', el);
@@ -35,11 +35,12 @@
 
   Z.views.login = function (el) {
     el.innerHTML = shell('Welcome back', 'Log in to watch ads and track your rewards.',
-      '<form class="card form" id="f" novalidate>' + googleBlock('Continue with Google') +
+      '<form class="card form" id="f" novalidate>' +
       Z.field({ id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', attrs: 'autocomplete="email" inputmode="email" autocapitalize="off" required' }) +
       Z.field({ id: 'pw', label: 'Password', type: 'password', placeholder: 'Your password', attrs: 'autocomplete="current-password" required' }) +
       '<div id="err"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Log in</button>' +
+      googleBlock('Continue with Google') +
       '<button class="link-btn center" type="button" data-go="/forgot">Forgot password?</button>' +
       '</form>' +
       '<p class="auth-alt">New to Zyven? <a data-go="/signup" class="link">Create an account</a></p>');
@@ -70,13 +71,14 @@
 
   Z.views.signup = function (el) {
     el.innerHTML = shell('Create your account', 'Start earning rewards for watching ads.',
-      '<form class="card form" id="f" novalidate>' + googleBlock('Sign up with Google') +
+      '<form class="card form" id="f" novalidate>' +
       Z.field({ id: 'name', label: 'Full name', placeholder: 'Your name', attrs: 'autocomplete="name" maxlength="60" required' }) +
       Z.field({ id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', attrs: 'autocomplete="email" inputmode="email" autocapitalize="off" required' }) +
       Z.field({ id: 'pw', label: 'Password', type: 'password', placeholder: 'At least 8 characters', attrs: 'autocomplete="new-password" required' }) +
       Z.field({ id: 'ref', label: 'Referral code (optional)', value: storedRef(), placeholder: 'Enter a friend\u2019s code', attrs: 'maxlength="12" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase"' }) +
       '<div id="err"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Create account</button>' +
+      googleBlock('Sign up with Google') +
       '</form>' +
       '<p class="auth-alt">Already have an account? <a data-go="/login" class="link">Log in</a></p>');
 

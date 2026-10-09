@@ -6,6 +6,7 @@
 
   window.Z = window.Z || {};
   // Email links come back as #access_token=... / #error=... : keep a copy before the SDK clears it.
+  window.Z.SUPABASE_URL = SUPABASE_URL; window.Z.SUPABASE_KEY = SUPABASE_ANON_KEY;
   window.Z.bootHash = window.location.hash || '';
 
   window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
