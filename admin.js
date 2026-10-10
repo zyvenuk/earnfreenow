@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
     ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
@@ -28,6 +28,11 @@
   function relation(x) { return Array.isArray(x) ? x[0] : x; }
 
   var SECTIONS = {};
+
+  /* ---------------- Plans, subscriptions, badges (see plans-admin.js) ---------------- */
+  SECTIONS.plans = function (body, ctx) { return Z.plansAdmin.plans(body, ctx); };
+  SECTIONS.subscriptions = function (body, ctx) { return Z.plansAdmin.subs(body, ctx); };
+  SECTIONS.badges = function (body, ctx) { return Z.plansAdmin.badges(body, ctx); };
 
   /* ---------------- Maintenance (see maintenance.js) ---------------- */
   SECTIONS.maintenance = function (body, ctx) { return Z.maint.adminView(body, ctx); };
@@ -226,7 +231,7 @@
       Z.field({ id: 't', label: 'Title', value: a.title, attrs: 'maxlength="80"' }) +
       Z.field({ id: 'd', label: 'Description (optional)', value: a.description, attrs: 'maxlength="200"' }) +
       Z.field({ id: 'ty', label: 'Ad type', type: 'select', value: a.ad_type, options: AD_TYPES }) +
-      '<div class="two">' + Z.field({ id: 'rw', label: 'Reward', value: a.reward, attrs: 'inputmode="decimal"' }) +
+      '<div class="two">' + Z.field({ id: 'rw', label: 'Base reward', value: a.reward, attrs: 'inputmode="decimal"', hint: 'Used only while Plans are OFF. With Plans ON the plan sets the reward.' }) +
       Z.field({ id: 'du', label: 'Seconds to watch', value: a.duration_seconds, attrs: 'inputmode="numeric"', hint: '5 to 300' }) + '</div>' +
       '<div class="two">' + Z.field({ id: 'dl', label: 'Daily limit per user', value: a.daily_limit, attrs: 'inputmode="numeric"', placeholder: 'No limit' }) +
       Z.field({ id: 'tl', label: 'Total limit per user', value: a.total_limit, attrs: 'inputmode="numeric"', placeholder: 'No limit' }) + '</div>' +

@@ -10,7 +10,8 @@
   var SUBS = {
     support: { title: 'Support', back: '/profile', tab: 'profile' },
     notifications: { title: 'Notifications', back: '/home', tab: '' },
-    referral: { title: 'Referrals', back: '/profile', tab: 'profile' }
+    referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
+    plans: { title: 'Plans', back: '/home', tab: 'home' }
   };
   var AUTH_ROUTES = ['login', 'signup', 'forgot', 'verify'];
 
@@ -43,6 +44,7 @@
     if (!Z.ready) return;
     if (Z.viewer && Z.viewer.isOpen()) Z.viewer.close(true, true, true); // never leave an ad timer running under another screen
     clearInterval(Z.maint.cd);
+    (Z.leaveHooks || []).splice(0).forEach(function (f) { try { f(); } catch (e) { /* ignore */ } });   // stop timers of the screen we are leaving
     if (!Z.maint.data) await Z.maint.refresh(true);                                                   // first look: wait for it
     else if (Date.now() - Z.maint.at > 60000) Z.maint.refresh().then(function (ch) { if (ch) Z.route(); });   // later: refresh quietly
     var path = (location.hash || '').replace(/^#/, '').split('?')[0];

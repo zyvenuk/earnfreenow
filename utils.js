@@ -60,6 +60,21 @@
     reason_required: 'Enter a reason of at least 3 characters.',
     cannot_modify_self: 'You cannot change your own account.',
     not_found: 'That item could not be found.',
+    no_active_plan: 'Activate a plan first to watch ads.',
+    plan_daily_limit: 'You have used all of today\u2019s ads for your plan. New ads arrive tomorrow.',
+    plan_expired: 'Your plan has expired or is no longer active, so this ad cannot earn a reward.',
+    plan_unavailable: 'This plan is not available right now.',
+    plan_sold_out: 'This plan has reached its maximum number of activations.',
+    plan_already_active: 'This plan is already active on your account.',
+    plan_other_active: 'You already have an active plan. You can activate another one when it ends.',
+    plan_repurchase_blocked: 'This plan can only be activated once per account.',
+    plan_user_limit: 'You have reached the limit for this plan.',
+    plan_limit_reached: 'You have reached the maximum number of plans allowed per account.',
+    invalid_request: 'Something went wrong. Please try again.',
+    badge_conflict: 'This badge clashes with another active badge. Every active badge needs its own threshold and rank, and a higher rank must need a higher count.',
+    plans_plan_no_key: 'That plan number is already used.',
+    invalid_image: 'Choose a PNG, JPG or WebP picture.',
+    image_too_large: 'That picture is too large. Choose one under 8 MB.',
     device_taken: 'This phone already has a Zyven account. Each phone can have only one account, so please log in to your existing account.',
     'provider is not enabled': 'Google sign-in is not set up yet. Please use email and password.',
     'Unsupported provider': 'Google sign-in is not set up yet. Please use email and password.',
@@ -83,6 +98,8 @@
     'Unable to validate email address': 'Enter a valid email address.',
     'Signup requires a valid password': 'Enter a valid password.'
   };
+  // Friendly text for a known error code (no console noise)
+  Z.errText = function (code) { return ERR[code] || 'Something went wrong. Please try again.'; };
   Z.errMsg = function (e) {
     var m = (e && (e.message || e.error_description || e.msg)) || (typeof e === 'string' ? e : '');
     if (e) console.error('[Zyven]', e);
@@ -295,7 +312,7 @@
     }
     return r.data;
   };
-  Z.invalidateSummary = function () { Z.state.summaryAt = 0; };
+  Z.invalidateSummary = function () { Z.state.summaryAt = 0; if (Z.plans) Z.plans.invalidate(); };
   Z.updateBalanceChip = function () {
     var chip = Z.$('#bar-balance'), s = Z.state.summary;
     if (s) chip.textContent = Z.money(s.balance);

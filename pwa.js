@@ -168,6 +168,7 @@
   };
 
   P.bindCards = function (root) {
+    root = Z.$('.page', root) || root;   // bind to the page (rebuilt each visit), never to the long-lived view container
     root.addEventListener('click', async function (e) {
       var b = e.target.closest('[data-pwa-act]');
       if (!b || !root.contains(b)) return;

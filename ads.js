@@ -30,7 +30,9 @@
       '<div id="list">' + Z.skel(4, 84) + '</div></section>';
     Z.$('#reload', el).addEventListener('click', function () { Z.route(); });
 
-    var r = await sb.rpc('list_available_ads');
+    var plansOn = Z.plans.enabled();
+    var rr = await Promise.all([sb.rpc('list_available_ads'), plansOn ? Z.plans.status(true).catch(function () { return null; }) : null]);
+    var r = rr[0], pst = rr[1];
     if (ctx.stale()) return;
     var list = Z.$('#list', el);
     if (r.error) {
@@ -40,11 +42,14 @@
     }
     var ads = r.data || [];
     Z.state.ads = ads;
+    if (plansOn && pst && !pst.current) { list.innerHTML = Z.maint.notices(['platform']) + '<div class="card">' + Z.plans.noPlan() + '</div>'; return; }
+    var head = plansOn && pst ? Z.plans.watchHeader(pst) : '';
     if (!ads.length) {
-      list.innerHTML = Z.empty({ icon: 'play', title: 'No ads right now', text: 'New ads appear here when they are available. Check back soon.' });
+      list.innerHTML = Z.maint.notices(['platform']) + head + (plansOn && pst && pst.remaining < 1 ? '' :
+        '<div class="card">' + Z.empty({ icon: 'play', title: 'No ads right now', text: 'New ads appear here when they are available. Check back soon.' }) + '</div>');
       return;
     }
-    var html = Z.maint.notices(['platform']) + Z.slots.html('watch_top');
+    var html = Z.maint.notices(['platform']) + head + Z.slots.html('watch_top');
     ads.forEach(function (a, i) {
       html += adCard(a);
       if (i === 1 && ads.length > 2) html += Z.slots.html('watch_between');

@@ -14,7 +14,8 @@
     referral_unlock_out: { label: 'Moved to Main Wallet', icon: 'refresh', cls: '' },
     referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
     referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
-    admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' }
+    admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' },
+    plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' }
   };
   Z.TX = TX;
 
@@ -33,6 +34,8 @@
   Z.views.home = async function (el, ctx) {
     var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings().catch(function () {})]);
     var s = both[0];
+    if (ctx.stale()) return;
+    var pst = Z.plans.enabled() ? await Z.plans.status(true).catch(function () { return null; }) : null;   // server-clock plan status
     if (ctx.stale()) return;
     var first = (s.full_name || '').split(' ')[0] || 'there';
     var html = '<section class="page">' +
@@ -56,6 +59,7 @@
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
 
+    html += Z.plans.homeCard(pst);
     html += Z.followCard();
     html += Z.pwa.cards();
 
@@ -81,6 +85,7 @@
 
     html += Z.slots.html('home_bottom') + '</section>';
     el.innerHTML = html;
+    if (pst) Z.plans.tickLeft(el);
     Z.pwa.bindCards(el);
     Z.slots.attach(el, ctx);
   };
@@ -198,6 +203,8 @@
   Z.views.profile = async function (el, ctx) {
     var s = await Z.loadSummary();
     if (ctx.stale()) return;
+    var pst = Z.plans.enabled() ? await Z.plans.status().catch(function () { return null; }) : null;
+    if (ctx.stale()) return;
     var initial = (s.full_name || '?').trim().charAt(0).toUpperCase();
 
     el.innerHTML = '<section class="page">' +
@@ -208,6 +215,7 @@
       '<div class="row">' + '<span class="row-ic">' + Z.icon('clock') + '</span><span class="row-main"><span class="row-title">Member since</span></span><span class="amt muted">' + Z.fmtDay(s.created_at) + '</span></div>' +
       '</div>' +
       '<div class="card">' +
+      Z.plans.profileRow(pst) +
       '<button class="row row-btn" id="verify"><span class="row-ic ' + (s.email_verified ? 'pos' : 'warn') + '">' + Z.icon('shield') + '</span>' +
       '<span class="row-main"><span class="row-title">Account verification</span><span class="row-sub">' + (s.email_verified ? 'Your Gmail / email is verified' : 'Not verified. Tap to verify') + '</span></span>' +
       Z.icon('chevron', 'row-chev') + '</button>' +
@@ -225,6 +233,7 @@
     Z.slots.attach(el, ctx);
 
     Z.pwa.bindProfile(el);
+    if (pst) Z.plans.tickLeft(el);
     Z.$('#verify', el).addEventListener('click', function () { verifySheet(this); });
     Z.$('#logout', el).addEventListener('click', async function () {
       if (await Z.confirm({ title: 'Log out?', text: 'You can log back in any time.', confirm: 'Log out' })) Z.signOut();
