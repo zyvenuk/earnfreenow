@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['devices', 'Devices', 'phone'], ['cleanup', 'Cleanup', 'trash'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
     ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
@@ -28,6 +28,90 @@
   function relation(x) { return Array.isArray(x) ? x[0] : x; }
 
   var SECTIONS = {};
+
+  /* ---------------- Devices: accounts seen on the same phone ---------------- */
+  SECTIONS.devices = async function (body, ctx) {
+    var kind = 'same', groups = [];
+    body.innerHTML = '<div class="page-head"><div><h2>Devices</h2><p class="sub">Accounts that share a phone, so you can review and suspend them together.</p></div></div>' +
+      Z.chips([['same', 'Same phone'], ['similar', 'Similar devices']], 'same', 'data-dk') +
+      '<div id="dnote"></div><div id="dg"></div>';
+    var dg = Z.$('#dg', body), note = Z.$('#dnote', body);
+
+    function acct(a, canAct) {
+      var susp = a.status === 'suspended';
+      return '<div class="row dev-acct"><span class="avatar sm">' + Z.esc((a.full_name || '?').charAt(0).toUpperCase()) + '</span>' +
+        '<span class="row-main"><span class="row-title">' + Z.esc(a.full_name) + ' ' + (susp ? Z.badge('suspended') : '') + '</span>' +
+        '<span class="row-sub">' + Z.esc(a.email) + '</span>' +
+        '<span class="row-sub">Joined ' + Z.fmtDay(a.created_at) + ' \u00b7 balance ' + Z.money(a.balance) + ' \u00b7 last seen ' + Z.fmtDate(a.last_seen) + '</span>' +
+        (susp && a.note ? '<span class="row-sub wrap" style="color:var(--warn)">' + Z.esc(a.note) + '</span>' : '') + '</span>' +
+        '<button class="btn ' + (susp ? 'btn-tonal' : 'btn-danger-ghost') + ' btn-sm" data-' + (susp ? 'react' : 'susp') + '="' + a.user_id + '">' + (susp ? 'Reactivate' : 'Suspend') + '</button></div>';
+    }
+
+    function paint() {
+      note.innerHTML = kind === 'similar'
+        ? '<div class="alert a-warn">' + Z.icon('alert') + '<div>These are <b>possible</b> matches (same phone model and browser settings). Different phones of the same model can look alike, so check before suspending.</div></div>'
+        : '<div class="alert a-info">' + Z.icon('info') + '<div>Each group is one phone (same device ID) used by more than one account.</div></div>';
+      dg.innerHTML = groups.length ? groups.map(function (g, i) {
+        var active = g.accounts.filter(function (a) { return a.status !== 'suspended'; });
+        return '<div class="card dev-group"><div class="dg-head"><span class="row-ic warn">' + Z.icon('phone') + '</span>' +
+          '<div class="row-main"><span class="row-title">' + (kind === 'same' ? 'Phone ' : 'Device ') + Z.esc(g.key) + '\u2026</span><span class="row-sub">' + g.size + ' accounts \u00b7 last seen ' + Z.fmtDate(g.last_seen) + '</span></div>' +
+          (active.length > 1 ? '<button class="btn btn-danger-ghost btn-sm" data-all="' + i + '">Suspend all</button>' : '') + '</div>' +
+          g.accounts.map(function (a) { return acct(a); }).join('') + '</div>';
+      }).join('') : '<div class="card">' + Z.empty({ icon: 'phone', title: kind === 'same' ? 'No shared phones found' : 'No similar devices found', text: 'Accounts that share a phone will appear here.' }) + '</div>';
+    }
+
+    async function load() {
+      dg.innerHTML = Z.skel(3, 120);
+      var r = await sb.rpc('admin_device_groups', { p_kind: kind });
+      if (ctx.stale()) return;
+      if (r.error) return retry(dg, load);
+      groups = r.data || []; paint();
+    }
+
+    function suspendSheet(ids, label) {
+      var sh = Z.sheet('<h2 class="sheet-title">Suspend ' + Z.esc(label) + '</h2><form id="sf2" novalidate>' +
+        Z.field({ id: 'sr', label: 'Reason (shown to the user)', type: 'textarea', rows: 3, value: 'Multiple accounts on one phone', attrs: 'maxlength="300"' }) +
+        '<div id="sferr"></div><div class="sheet-actions"><button class="btn btn-danger btn-block" type="submit">Suspend</button>' +
+        '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
+      Z.$('#sf2', sh.el).addEventListener('submit', function (e) {
+        e.preventDefault();
+        var reason = Z.$('#sr', sh.el).value.trim();
+        if (reason.length < 3) return Z.formError(Z.$('#sferr', sh.el), 'Enter a reason of at least 3 characters.');
+        Z.run(Z.$('button[type=submit]', sh.el), async function () {
+          var r = await sb.rpc('admin_suspend_users', { p_user_ids: ids, p_reason: reason });
+          if (r.error) throw r.error;
+          Z.toast(r.data + (r.data === 1 ? ' account suspended' : ' accounts suspended'), 'ok'); sh.close(); load();
+        }, Z.$('#sferr', sh.el));
+      });
+    }
+
+    dg.addEventListener('click', async function (e) {
+      var s1 = e.target.closest('[data-susp]'), s2 = e.target.closest('[data-all]'), s3 = e.target.closest('[data-react]');
+      if (s1) { var id = s1.getAttribute('data-susp'); var a; groups.some(function (g) { return g.accounts.some(function (x) { if (x.user_id === id) { a = x; return true; } }); }); suspendSheet([id], a ? a.full_name : 'account'); }
+      if (s2) {
+        var g = groups[parseInt(s2.getAttribute('data-all'), 10)];
+        var ids = g.accounts.filter(function (x) { return x.status !== 'suspended'; }).map(function (x) { return x.user_id; });
+        suspendSheet(ids, ids.length + ' accounts');
+      }
+      if (s3) {
+        if (!await Z.confirm({ title: 'Reactivate this account?', text: 'They can earn and withdraw again, and the suspension reason is cleared.', confirm: 'Reactivate' })) return;
+        Z.run(s3, async function () {
+          var r = await sb.rpc('admin_set_user_status', { p_user_id: s3.getAttribute('data-react'), p_status: 'active' });
+          if (r.error) throw r.error;
+          Z.toast('Account reactivated', 'ok'); load();
+        });
+      }
+    });
+    Z.$('[data-dk]', body).parentNode.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-dk]'); if (!c || c.getAttribute('data-dk') === kind) return;
+      kind = c.getAttribute('data-dk');
+      Z.$$('[data-dk]', body).forEach(function (x) { x.classList.toggle('on', x === c); });
+      load();
+    });
+    load();
+  };
+
+  SECTIONS.cleanup = function (body, ctx) { return Z.cleanupAdmin.view(body, ctx); };
 
   /* ---------------- Plans, subscriptions, badges (see plans-admin.js) ---------------- */
   SECTIONS.plans = function (body, ctx) { return Z.plansAdmin.plans(body, ctx); };
@@ -242,6 +326,7 @@
       Z.field({ id: 'so', label: 'Sort order', value: a.sort_order, attrs: 'inputmode="numeric"', hint: 'Lower numbers show first.' }) +
       Z.switchEl('ac', a.is_active, 'Active') +
       '<div id="adferr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Create ad' : 'Save changes') + '</button>' +
+      (isNew ? '' : '<button class="btn btn-danger-ghost btn-block" type="button" id="adel"' + (a.is_active ? ' disabled' : '') + '>' + (a.is_active ? 'Delete ad (switch it off first)' : 'Delete ad for good') + '</button>') +
       '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
     var el = sh.el;
     function sync() {
@@ -249,6 +334,15 @@
       Z.$('#code-box', el).hidden = direct; Z.$('#url-box', el).hidden = !direct;
     }
     Z.$('#ty', el).addEventListener('change', sync); sync();
+    var adel = Z.$('#adel', el);
+    if (adel) adel.addEventListener('click', async function () {
+      if (!await Z.confirm({ title: 'Delete this ad for good?', text: 'The ad and its view history are removed from the database. This cannot be undone.', confirm: 'Delete', danger: true })) return;
+      Z.run(adel, async function () {
+        var r = await sb.rpc('admin_delete_ad', { p_id: a.id });
+        if (r.error) throw r.error;
+        Z.toast('Ad deleted', 'ok'); sh.close(); Z.route();
+      });
+    });
 
     function intOrNull(v) { v = String(v).trim(); if (!v) return null; var n = parseInt(v, 10); return isFinite(n) ? n : NaN; }
     Z.$('#adf', el).addEventListener('submit', function (e) {
@@ -793,6 +887,8 @@
       Z.field({ id: 'mp', label: 'Minimum payout', value: s.min_payout, attrs: 'inputmode="decimal"' }) +
       '<div class="two">' + Z.field({ id: 'fp', label: 'Fee percent', value: s.fee_percent, attrs: 'inputmode="decimal"' }) +
       Z.field({ id: 'ff', label: 'Fixed fee', value: s.fee_fixed, attrs: 'inputmode="decimal"' }) + '</div>' +
+      Z.switchEl('le', s.leaderboard_enabled, 'Leaderboard enabled') +
+      Z.field({ id: 'ls', label: 'Leaderboard: how many top users to show', value: s.leaderboard_size, attrs: 'inputmode="numeric"', hint: 'From 3 to 100.' }) +
       Z.field({ id: 'og', label: 'Direct link loading allowance (seconds)', value: s.offer_grace_seconds, attrs: 'inputmode="numeric"', hint: 'Smart links take a few seconds to load. This is added to the task\u2019s watch time for Direct link ads (default 5), so users see e.g. 20 s for a 15 s task.' }) +
       Z.field({ id: 'pn', label: 'Payout notice', type: 'textarea', rows: 3, value: s.payout_notice, hint: 'Shown on the Payout screen.' }) +
       Z.switchEl('pe', s.payouts_enabled, 'Payouts enabled') +
@@ -811,8 +907,10 @@
         currency_symbol: Z.$('#cs', body).value.trim(), min_payout: parseFloat(Z.$('#mp', body).value),
         fee_percent: parseFloat(Z.$('#fp', body).value), fee_fixed: parseFloat(Z.$('#ff', body).value),
         payout_notice: Z.$('#pn', body).value.trim(), payouts_enabled: Z.$('#pe', body).checked,
-        offer_grace_seconds: parseInt(Z.$('#og', body).value, 10)
+        offer_grace_seconds: parseInt(Z.$('#og', body).value, 10),
+        leaderboard_enabled: Z.$('#le', body).checked, leaderboard_size: parseInt(Z.$('#ls', body).value, 10)
       };
+      if (!isFinite(p.leaderboard_size) || p.leaderboard_size < 3 || p.leaderboard_size > 100) return Z.formError(Z.$('#serr', body), 'Leaderboard size must be a whole number from 3 to 100.');
       if (!isFinite(p.offer_grace_seconds) || p.offer_grace_seconds < 0 || p.offer_grace_seconds > 30) return Z.formError(Z.$('#serr', body), 'Loading allowance must be 0 to 30 seconds.');
       var err = Z.$('#serr', body);
       if (!p.currency_symbol) return Z.formError(err, 'Enter a currency symbol.');

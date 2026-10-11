@@ -59,6 +59,8 @@
 
     el.innerHTML = '<section class="page">' +
       '<div class="card info-card"><div class="ic-line"><span>Available balance</span><b id="avail">' + Z.money(s.balance) + '</b></div>' +
+      '<div class="ic-line small"><span>Total earned</span><b>' + Z.money(s.total_earned) + '</b></div>' +
+      '<div class="ic-line small"><span>Paid out</span><b>' + Z.money(s.total_paid_out) + '</b></div>' +
       '<div class="ic-line small"><span>Minimum payout</span><b>' + Z.money(min) + '</b></div>' +
       ((Number(st.fee_percent) > 0 || Number(st.fee_fixed) > 0) ? '<div class="ic-line small"><span>Fee</span><b>' +
         [Number(st.fee_percent) > 0 ? Number(st.fee_percent) + '%' : '', Number(st.fee_fixed) > 0 ? Z.money(st.fee_fixed) : ''].filter(Boolean).join(' + ') + '</b></div>' : '') +
@@ -84,7 +86,10 @@
       '</form>' +
       (st.payout_notice ? '<div class="alert a-info">' + Z.icon('info') + '<div>' + Z.esc(st.payout_notice) + '</div></div>' : '') +
       '<div class="section-head"><h3>Your requests</h3></div>' +
-      '<div id="hist">' + Z.skel(2, 64) + '</div><div id="hmore"></div></section>';
+      '<div id="hist">' + Z.skel(2, 64) + '</div><div id="hmore"></div>' +
+      '<div class="section-head"><h3>Transactions</h3><button class="link-btn" id="txclear">Clear history</button></div>' +
+      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-tf') +
+      '<div class="card" id="tx"></div><div id="txmore"></div></section>';
 
     var form = Z.$('#pf', el), fields = Z.$('#fields', el), submit = Z.$('#submit', el);
     var nameEl = Z.$('#acc-name', el), numEl = Z.$('#acc-no', el), amtEl = Z.$('#amt', el);
@@ -195,5 +200,55 @@
       }
     });
     loadHist(true);
+
+    /* ---- Transactions (wallet history), folded to 2 rows; server paging after expanding ---- */
+    var TXF = {
+      all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
+      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'], other: ['admin_adjustment', 'admin_reward', 'plan_purchase']
+    };
+    var txF = 'all', txItems = [], txDone = false, txLoading = false, txExpanded = false;
+    var txBox = Z.$('#tx', el), txMore = Z.$('#txmore', el);
+    function renderTxMore() {
+      txMore.innerHTML = txDone || !txItems.length || !txExpanded ? '' : '<button class="btn btn-tonal btn-block" id="txmb">Load more</button>';
+      var b = Z.$('#txmb', txMore);
+      if (b) b.addEventListener('click', function () { Z.busy(b, true); loadTx(false); });
+    }
+    txBox.addEventListener('zfold', function (e) { txExpanded = e.detail.expanded; renderTxMore(); });
+    async function loadTx(reset) {
+      if (txLoading) return; txLoading = true;
+      if (reset) { txItems = []; txDone = false; txExpanded = false; txBox.innerHTML = Z.skel(2, 56); txMore.innerHTML = ''; }
+      var q = sb.from('transactions').select('id,type,amount,balance_after,wallet,note,created_at')
+        .order('created_at', { ascending: false }).range(txItems.length, txItems.length + 9);
+      if (TXF[txF]) q = q.in('type', TXF[txF]);
+      var r = await q;
+      txLoading = false;
+      if (ctx.stale()) return;
+      if (r.error) { txBox.innerHTML = Z.errorState(); Z.$('[data-retry]', txBox).addEventListener('click', function () { loadTx(true); }); return; }
+      txItems = txItems.concat(r.data || []);
+      txDone = (r.data || []).length < 10;
+      txBox.innerHTML = txItems.length ? Z.fold(txItems.map(Z.txRow), { expanded: txExpanded }) : Z.empty({ icon: 'receipt', title: 'No transactions', text: 'Nothing here yet.' });
+      renderTxMore();
+    }
+    Z.$('[data-tf]', el).parentNode.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-tf]');
+      if (!c || c.getAttribute('data-tf') === txF) return;
+      txF = c.getAttribute('data-tf');
+      Z.$$('[data-tf]', el).forEach(function (x) { x.classList.toggle('on', x === c); });
+      loadTx(true);
+    });
+    // Clearing hides the list for you; Zyven keeps the records for accounting and your balance is not affected
+    Z.$('#txclear', el).addEventListener('click', async function () {
+      if (!txItems.length) return Z.toast('There is nothing to clear.');
+      if (!await Z.confirm({ title: 'Clear transaction history?', text: 'Your transaction list is permanently deleted. Your balance and earnings are not changed.', confirm: 'Clear history', danger: true })) return;
+      var b = this;
+      Z.run(b, async function () {
+        var r = await sb.rpc('clear_my_transactions');
+        if (r.error) throw r.error;
+        Z.invalidateSummary();
+        Z.toast('History cleared', 'ok');
+        loadTx(true);
+      });
+    });
+    loadTx(true);
   };
 })();

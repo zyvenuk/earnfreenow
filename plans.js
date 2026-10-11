@@ -159,8 +159,9 @@
         (st.last_expired ? ' Your last plan, ' + Z.esc(st.last_expired.name) + ', ended on ' + Z.fmtDay(st.last_expired.expired_at) + '.' : '') + '</div></div>') +
       '<div class="section-head"><h3>Available plans</h3></div>' +
       (plans.length ? plans.map(card).join('') : '<div class="card">' + Z.empty({ icon: 'layout', title: 'No plans yet', text: 'New plans will appear here.' }) + '</div>') +
-      '</section>';
+      Z.slots.html('wallet_bottom') + '</section>';
     tickLeft(el);
+    Z.slots.attach(el, ctx);
 
     Z.$('.page', el).addEventListener('click', async function (e) {   // on the page itself: it is rebuilt on every visit
       var b = e.target.closest('[data-buy]'); if (!b) return;

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-build="20261009-5">
+<html lang="en" data-build="20261009-7">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="monogram.png">
   <link rel="apple-touch-icon" href="monogram.png">
-  <link rel="stylesheet" href="style.css?v=20261009-5">
+  <link rel="stylesheet" href="style.css?v=20261009-7">
 </head>
 <body data-mode="boot">
 
@@ -52,6 +52,8 @@
     <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.500 9.500c0-1 1-1.500 2.500-1.500s2.500.5 2.500 1.500-1 1.300-2.500 1.500-2.500.5-2.500 1.500 1 1.500 2.500 1.500 2.500-.5 2.500-1.500"/></symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1 3h6l1-3h5"/></symbol>
     <symbol id="i-google" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.490 12.270c0-.790-.070-1.540-.190-2.270H12v4.510h6.470c-.290 1.480-1.140 2.730-2.400 3.580v3h3.860c2.260-2.090 3.560-5.170 3.560-8.820z"/><path fill="#34A853" d="M12 24c3.240 0 5.950-1.080 7.930-2.910l-3.860-3c-1.080.720-2.450 1.160-4.070 1.160-3.130 0-5.780-2.110-6.730-4.960H1.290v3.090C3.260 21.300 7.310 24 12 24z"/><path fill="#FBBC05" d="M5.270 14.290c-.250-.720-.380-1.490-.380-2.290s.140-1.570.380-2.290V6.620H1.290C.470 8.240 0 10.060 0 12s.470 3.760 1.290 5.380l3.980-3.090z"/><path fill="#EA4335" d="M12 4.750c1.770 0 3.350.610 4.600 1.800l3.420-3.420C17.950 1.190 15.240 0 12 0 7.310 0 3.260 2.700 1.290 6.620l3.980 3.090C6.220 6.860 8.870 4.750 12 4.750z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a3 3 0 0 0 4 2.800M16 6h4v1a3 3 0 0 1-4 2.800M12 13v4M9 21h6M10 17h4"/></symbol>
     <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.700 6.300a4 4 0 0 0-5.400 5.400L3 18l3 3 6.300-6.300a4 4 0 0 0 5.400-5.400l-2.600 2.600-2.400-.6-.6-2.400z"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M4 20h16"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.500 7.500 2.500 7.500h-17S6 15 6 9"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
@@ -76,7 +78,7 @@
     <img src="monogram.png" alt="" class="bar-logo" id="bar-logo" onerror="this.style.display='none'">
     <h1 id="bar-title">Zyven</h1>
     <button class="icon-btn" id="bar-bell" data-go="/notifications" aria-label="Notifications" hidden><svg class="ic"><use href="#i-bell"/></svg><span class="bell-badge" id="bell-badge" hidden></span></button>
-    <button class="chip-balance" id="bar-balance" data-go="/wallet" hidden aria-label="Wallet balance"></button>
+    <button class="chip-balance" id="bar-balance" data-go="/payout" hidden aria-label="Balance"></button>
   </header>
 
   <main id="view" tabindex="-1"></main>
@@ -84,8 +86,8 @@
   <nav id="nav" aria-label="Main">
     <a class="nav-item" data-go="/home" data-tab="home"><span class="nav-pill"><svg class="ic"><use href="#i-home"/></svg></span><span>Home</span></a>
     <a class="nav-item" data-go="/watch" data-tab="watch"><span class="nav-pill"><svg class="ic"><use href="#i-play"/></svg></span><span>Watch</span></a>
-    <a class="nav-item" data-go="/wallet" data-tab="wallet"><span class="nav-pill"><svg class="ic"><use href="#i-wallet"/></svg></span><span>Wallet</span></a>
-    <a class="nav-item" data-go="/payout" data-tab="payout"><span class="nav-pill"><svg class="ic"><use href="#i-payout"/></svg></span><span>Payout</span></a>
+    <a class="nav-item" data-go="/plans" data-tab="plans"><span class="nav-pill"><svg class="ic"><use href="#i-layout"/></svg></span><span>Plans</span></a>
+    <a class="nav-item" data-go="/payout" data-tab="payout"><span class="nav-pill"><svg class="ic"><use href="#i-wallet"/></svg></span><span>Payout</span></a>
     <a class="nav-item" data-go="/profile" data-tab="profile"><span class="nav-pill"><svg class="ic"><use href="#i-user"/></svg></span><span>Profile</span></a>
   </nav>
 </div>
@@ -95,22 +97,24 @@
 <div id="toast-root" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-init.js?v=20261009-5"></script>
-<script src="utils.js?v=20261009-5"></script>
-<script src="adslots.js?v=20261009-5"></script>
-<script src="auth.js?v=20261009-5"></script>
-<script src="ads.js?v=20261009-5"></script>
-<script src="wallet.js?v=20261009-5"></script>
-<script src="payout.js?v=20261009-5"></script>
-<script src="community.js?v=20261009-5"></script>
-<script src="referral.js?v=20261009-5"></script>
-<script src="pwa.js?v=20261009-5"></script>
-<script src="device.js?v=20261009-5"></script>
-<script src="online.js?v=20261009-5"></script>
-<script src="maintenance.js?v=20261009-5"></script>
-<script src="plans.js?v=20261009-5"></script>
-<script src="plans-admin.js?v=20261009-5"></script>
-<script src="admin.js?v=20261009-5"></script>
-<script src="app.js?v=20261009-5"></script>
+<script src="supabase-init.js?v=20261009-7"></script>
+<script src="utils.js?v=20261009-7"></script>
+<script src="adslots.js?v=20261009-7"></script>
+<script src="auth.js?v=20261009-7"></script>
+<script src="ads.js?v=20261009-7"></script>
+<script src="wallet.js?v=20261009-7"></script>
+<script src="payout.js?v=20261009-7"></script>
+<script src="community.js?v=20261009-7"></script>
+<script src="referral.js?v=20261009-7"></script>
+<script src="pwa.js?v=20261009-7"></script>
+<script src="device.js?v=20261009-7"></script>
+<script src="online.js?v=20261009-7"></script>
+<script src="maintenance.js?v=20261009-7"></script>
+<script src="plans.js?v=20261009-7"></script>
+<script src="leaderboard.js?v=20261009-7"></script>
+<script src="plans-admin.js?v=20261009-7"></script>
+<script src="cleanup.js?v=20261009-7"></script>
+<script src="admin.js?v=20261009-7"></script>
+<script src="app.js?v=20261009-7"></script>
 </body>
 </html>

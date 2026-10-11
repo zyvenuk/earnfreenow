@@ -5,13 +5,13 @@
   var view = Z.$('#view');
   var tok = 0;
 
-  var TITLES = { home: 'Zyven', watch: 'Watch ads', wallet: 'Wallet', payout: 'Payout', profile: 'Profile' };
+  var TITLES = { home: 'Zyven', watch: 'Watch ads', plans: 'Plans', payout: 'Payout', profile: 'Profile' };
   // Screens opened from other screens (no bottom-nav tab of their own)
   var SUBS = {
     support: { title: 'Support', back: '/profile', tab: 'profile' },
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
-    plans: { title: 'Plans', back: '/home', tab: 'home' }
+    leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' }
   };
   var AUTH_ROUTES = ['login', 'signup', 'forgot', 'verify'];
 
@@ -33,7 +33,7 @@
     Z.$('#bar-back').hidden = !Z.backTarget;
     Z.$('#bar-logo').hidden = !!Z.backTarget;
     Z.$('#bar-bell').hidden = mode !== 'app' || name === 'notifications';
-    Z.$('#bar-balance').hidden = !(mode === 'app' && isTab && name !== 'home' && name !== 'wallet');
+    Z.$('#bar-balance').hidden = !(mode === 'app' && isTab && name !== 'home' && name !== 'payout');
     var active = sub ? sub.tab : name;
     Z.$$('.nav-item').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-tab') === active); });
     if (mode === 'app' && Z.state.summary) Z.updateBalanceChip();
@@ -50,6 +50,7 @@
     var path = (location.hash || '').replace(/^#/, '').split('?')[0];
     var parts = path.split('/').filter(Boolean);
     var root = parts[0] || '', sub = parts[1] || '';
+    if (root === 'wallet') { root = 'payout'; history.replaceState(null, '', '#/payout'); }   // the Wallet page is gone: old links go to Payout
     var name, mode = 'app';
 
     if (Z.recovery) { name = 'reset'; mode = 'auth'; }

@@ -126,11 +126,12 @@
     syncBell();
 
     el.innerHTML = '<section class="page"><div class="page-head"><div><h2>Notifications</h2><p class="sub" id="nsub"></p></div>' +
-      '<button class="btn btn-tonal btn-sm" id="readall" hidden>Mark all read</button></div>' +
+      '<div class="head-btns"><button class="btn btn-tonal btn-sm" id="readall" hidden>Mark all read</button>' +
+      '<button class="btn btn-danger-ghost btn-sm" id="delall" hidden>Delete all</button></div></div>' +
       '<div class="seg" role="tablist">' + ['mails', 'alerts'].map(function (k) {
         return '<button class="seg-btn" role="tab" data-t="' + k + '">' + NTABS[k].label + '<i class="seg-count" id="cnt-' + k + '" hidden></i></button>';
       }).join('') + '</div><div id="nl"></div></section>';
-    var nl = Z.$('#nl', el), all = Z.$('#readall', el);
+    var nl = Z.$('#nl', el), all = Z.$('#readall', el), delAll = Z.$('#delall', el);
 
     function paintTabs() {
       ['mails', 'alerts'].forEach(function (k) {
@@ -139,16 +140,18 @@
       });
       Z.$('#nsub', el).textContent = NTABS[tab].sub;
       all.hidden = !(counts[tab] > 0);
+      delAll.hidden = !(tab === 'mails' && cache.mails && cache.mails.length);
     }
 
     function card(n) {
       var t = Z.ANN[n.type] || Z.ANN.info;
-      return '<button class="notif' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '">' +
+      return '<div class="notif' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '" tabindex="0">' +
         '<span class="row-ic ' + t.cls + '">' + Z.icon(t.icon) + '</span>' +
         '<span class="notif-main"><span class="notif-top"><b>' + Z.esc(n.title) + '</b>' +
         (n.priority >= 2 ? '<span class="badge b-rejected">Urgent</span>' : n.priority === 1 ? '<span class="badge b-pending">Important</span>' : '') + '</span>' +
         '<span class="notif-msg">' + Z.esc(n.message) + '</span>' +
-        '<span class="notif-time">' + ago(n.created_at) + '</span></span><i class="dot"></i></button>';
+        '<span class="notif-time">' + ago(n.created_at) + '</span></span><i class="dot"></i>' +
+        (n.personal ? '<button class="icon-btn sm notif-del" data-del="' + n.id + '" aria-label="Delete this mail">' + Z.icon('trash') + '</button>' : '') + '</div>';
     }
 
     async function show(k) {
@@ -166,6 +169,7 @@
       var items = cache[tab];
       nl.innerHTML = items.length ? items.map(card).join('')
         : '<div class="card">' + Z.empty({ icon: tab === 'mails' ? 'mail' : 'bell', title: tab === 'mails' ? 'No mails' : 'No alerts', text: NTABS[tab].empty }) + '</div>';
+      paintTabs();
     }
 
     Z.$('.seg', el).addEventListener('click', function (e) {
@@ -173,7 +177,20 @@
       if (b && b.getAttribute('data-t') !== tab) show(b.getAttribute('data-t'));
     });
 
-    nl.addEventListener('click', function (e) {
+    nl.addEventListener('click', async function (e) {
+      var del = e.target.closest('[data-del]');
+      if (del) {   // delete one of MY mails
+        if (!await Z.confirm({ title: 'Delete this mail?', text: 'This mail is permanently deleted.', confirm: 'Delete', danger: true })) return;
+        var id = del.getAttribute('data-del');
+        return Z.run(del, async function () {
+          var r = await sb.rpc('delete_my_mail', { p_id: id });
+          if (r.error) throw r.error;
+          var gone = (cache.mails || []).filter(function (x) { return x.id === id; })[0];
+          cache.mails = (cache.mails || []).filter(function (x) { return x.id !== id; });
+          if (gone && !gone.is_read) counts.mails = Math.max(0, counts.mails - 1);
+          syncBell(); draw(); Z.toast('Mail deleted');
+        });
+      }
       var c = e.target.closest('.notif'); if (!c) return;
       c.classList.toggle('open');
       var k = tab, n = (cache[k] || []).filter(function (x) { return x.id === c.getAttribute('data-id'); })[0];
@@ -194,6 +211,15 @@
         (cache[k] || []).forEach(function (n) { n.is_read = true; });
         Z.$$('.notif.unread', el).forEach(function (x) { x.classList.remove('unread'); });
         counts[k] = 0; syncBell(); paintTabs();
+      });
+    });
+
+    delAll.addEventListener('click', async function () {
+      if (!await Z.confirm({ title: 'Delete all your mails?', text: 'Every mail in My Mails is permanently deleted. This cannot be undone.', confirm: 'Delete all', danger: true })) return;
+      Z.run(delAll, async function () {
+        var r = await sb.rpc('delete_all_my_mails');
+        if (r.error) throw r.error;
+        cache.mails = []; counts.mails = 0; syncBell(); draw(); Z.toast('All mails deleted');
       });
     });
 

@@ -15,7 +15,7 @@
   ],
   "shortcuts": [
     { "name": "Watch ads", "short_name": "Watch", "url": "./#/watch", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] },
-    { "name": "Wallet", "short_name": "Wallet", "url": "./#/wallet", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] },
+    { "name": "Payout", "short_name": "Payout", "url": "./#/payout", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] },
     { "name": "Invite friends", "short_name": "Invite", "url": "./#/referral", "icons": [{ "src": "monogram.png", "sizes": "192x192" }] }
   ]
 }

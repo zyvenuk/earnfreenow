@@ -37,9 +37,7 @@
     if (ctx.stale()) return;
     var pst = Z.plans.enabled() ? await Z.plans.status(true).catch(function () { return null; }) : null;   // server-clock plan status
     if (ctx.stale()) return;
-    var first = (s.full_name || '').split(' ')[0] || 'there';
-    var html = '<section class="page">' +
-      '<h2 class="greet">Hi, ' + Z.esc(first) + '</h2>';
+    var html = '<section class="page">';
 
     if (s.status === 'suspended') {
       html += '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so earning and payouts are paused. Contact support if you think this is a mistake.' + (s.note ? '<br><b>' + Z.esc(s.note) + '</b>' : '') + '</div></div>';
@@ -48,8 +46,9 @@
     html += Z.maint.notices(['platform', 'payout']);
 
     html += '<div class="balance-card">' +
-      '<span class="bc-label">Available balance</span>' +
+      '<span class="bc-label">Main Wallet balance</span>' +
       '<div class="bc-amount">' + Z.money(s.balance) + '</div>' +
+      '<button class="bc-ref" data-go="/referral"><span>Referral Wallet</span><b>' + Z.money(s.referral_balance) + '</b><em>locked</em></button>' +
       '<div class="bc-stats"><div><b>' + Z.money(s.today_earned) + '</b><span>Earned today</span></div>' +
       '<div><b>' + s.today_views + '</b><span>Ads watched today</span></div></div>' +
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
@@ -59,6 +58,7 @@
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
 
+    html += Z.leaderboard.homeCard();
     html += Z.plans.homeCard(pst);
     html += Z.followCard();
     html += Z.pwa.cards();
@@ -79,7 +79,7 @@
     }
     html += '</div>';
 
-    html += '<div class="section-head"><h3>Recent activity</h3><button class="link-btn" data-go="/wallet">See all</button></div>';
+    html += '<div class="section-head"><h3>Recent activity</h3><button class="link-btn" data-go="/payout">See all</button></div>';
     if (s.recent && s.recent.length) html += '<div class="card">' + Z.fold(s.recent.map(Z.txRow)) + '</div>';
     else html += '<div class="card">' + Z.empty({ icon: 'receipt', title: 'No activity yet', text: 'Your rewards and payouts will show up here.' }) + '</div>';
 
@@ -88,74 +88,6 @@
     if (pst) Z.plans.tickLeft(el);
     Z.pwa.bindCards(el);
     Z.slots.attach(el, ctx);
-  };
-
-  /* ---------------- Wallet ---------------- */
-  var FILTERS = {
-    all: null,
-    rewards: ['ad_reward'],
-    payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
-    referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'],
-    other: ['admin_adjustment']
-  };
-  var PAGE = 10;
-
-  Z.views.wallet = async function (el, ctx) {
-    var s = await Z.loadSummary(true);
-    if (ctx.stale()) return;
-    var filter = 'all', items = [], done = false, loading = false, expanded = false;
-
-    el.innerHTML = '<section class="page">' +
-      '<div class="card wallet-card"><span class="bc-label dark">Available balance</span>' +
-      '<div class="wc-amount">' + Z.money(s.balance) + '</div>' +
-      '<div class="wc-grid"><div><span>Total earned</span><b>' + Z.money(s.total_earned) + '</b></div>' +
-      '<div><span>Paid out</span><b>' + Z.money(s.total_paid_out) + '</b></div></div>' +
-      '<button class="ref-wallet" data-go="/referral"><span class="row-ic">' + Z.icon('gift') + '</span><span class="row-main"><span class="row-title">Referral Wallet</span>' +
-      '<span class="row-sub">Locked, not withdrawable. Moves to Main Wallet automatically.</span></span><b class="amt">' + Z.money(s.referral_balance) + '</b></button>' +
-      '<button class="btn btn-primary btn-block" data-go="/payout">Request payout</button></div>' +
-      '<div class="section-head"><h3>Transactions</h3></div>' +
-      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-f') +
-      '<div class="card" id="tx"></div><div id="more"></div>' + Z.slots.html('wallet_bottom') + '</section>';
-    Z.slots.attach(el, ctx);
-
-    var tx = Z.$('#tx', el), more = Z.$('#more', el);
-
-    // "Load more" (server paging) only appears once the folded list is expanded
-    function renderMore() {
-      more.innerHTML = done || !items.length || !expanded ? '' : '<button class="btn btn-tonal btn-block" id="more-btn">Load more</button>';
-      var mb = Z.$('#more-btn', more);
-      if (mb) mb.addEventListener('click', function () { Z.busy(mb, true); load(false); });
-    }
-    tx.addEventListener('zfold', function (e) { expanded = e.detail.expanded; renderMore(); });
-
-    async function load(reset) {
-      if (loading) return; loading = true;
-      if (reset) { items = []; done = false; expanded = false; tx.innerHTML = Z.skel(2, 56); more.innerHTML = ''; }
-      var q = sb.from('transactions').select('id,type,amount,balance_after,wallet,note,created_at')
-        .order('created_at', { ascending: false }).range(items.length, items.length + PAGE - 1);
-      if (FILTERS[filter]) q = q.in('type', FILTERS[filter]);
-      var r = await q;
-      loading = false;
-      if (ctx.stale()) return;
-      if (r.error) {
-        tx.innerHTML = Z.errorState();
-        Z.$('[data-retry]', tx).addEventListener('click', function () { load(true); });
-        return;
-      }
-      items = items.concat(r.data || []);
-      done = (r.data || []).length < PAGE;
-      tx.innerHTML = items.length ? Z.fold(items.map(Z.txRow), { expanded: expanded }) : Z.empty({ icon: 'receipt', title: 'No transactions', text: 'Nothing here yet.' });
-      renderMore();
-    }
-
-    Z.$('.chips', el).addEventListener('click', function (e) {
-      var c = e.target.closest('[data-f]');
-      if (!c || c.getAttribute('data-f') === filter) return;
-      filter = c.getAttribute('data-f');
-      Z.$$('.chip', el).forEach(function (x) { x.classList.toggle('on', x === c); });
-      load(true);
-    });
-    load(true);
   };
 
   /* ---------------- Account verification ---------------- */

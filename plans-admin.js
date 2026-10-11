@@ -152,6 +152,7 @@
       '<p class="hint" style="margin-top:-6px">Archived hides it from new buyers. Current subscribers keep earning until it ends.</p>' +
       '<div id="pferr"></div><div class="sheet-actions"><button class="btn btn-primary btn-block" type="submit">' + (isNew ? 'Create plan' : 'Save changes') + '</button>' +
       (isNew ? '' : '<button class="btn btn-tonal btn-block" type="button" id="subs">View subscriptions</button>') +
+      (!isNew && (p.is_archived || !p.is_active) && !p.total_activations ? '<button class="btn btn-danger-ghost btn-block" type="button" id="pdel">Delete plan for good</button>' : '') +
       '<button class="btn btn-ghost btn-block" type="button" data-close>Cancel</button></div></form>');
     var el = sh.el, getFile = bindPicker(el, 'lg');
 
@@ -166,6 +167,16 @@
     sync();
     var sb2 = Z.$('#subs', el);
     if (sb2) sb2.addEventListener('click', function () { Z.state.subsPlan = p.id; sh.close(); Z.go('/admin/subscriptions'); });
+    var pdel = Z.$('#pdel', el);
+    if (pdel) pdel.addEventListener('click', async function () {
+      if (!await Z.confirm({ title: 'Delete this plan for good?', text: 'Nobody ever activated it, so it is removed completely together with its logo.', confirm: 'Delete', danger: true })) return;
+      Z.run(pdel, async function () {
+        var r = await sb.rpc('admin_delete_plan', { p_id: p.id });
+        if (r.error) throw r.error;
+        removeFile(r.data && r.data.logo_path);
+        Z.toast('Plan deleted', 'ok'); sh.close(); Z.route();
+      });
+    });
 
     Z.$('#pf2', el).addEventListener('submit', function (e) {
       e.preventDefault();
