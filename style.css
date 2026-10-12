@@ -587,3 +587,25 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .dev-acct .btn { flex: none; }
 
 .pn-bar.hot i { background: var(--neg); }
+
+/* ---------- Leaderboard podium ---------- */
+.lb-title h2 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.lb-title p { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.podium { display: grid; grid-template-columns: 1fr 1.18fr 1fr; gap: 8px; align-items: end; padding: 18px 10px 0; overflow: hidden;
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%); }
+.pd { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; min-width: 0; }
+.pd-crown { color: #F5B50A; width: 30px; height: 30px; margin-bottom: -2px; filter: drop-shadow(0 2px 4px rgba(245,181,10,.45)); }
+.pd-crown .ic { width: 30px; height: 30px; fill: currentColor; stroke-width: 1.4; }
+.pd-av { width: 58px; height: 58px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 750; border: 3px solid #C9D0DB; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.pd.p1 .pd-av { width: 78px; height: 78px; font-size: 30px; border-color: #F5C542; }
+.pd.p3 .pd-av { border-color: #D9A06B; }
+.pd-name { font-weight: 700; font-size: 13.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-val { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.pd-val small { display: block; font-weight: 600; color: var(--muted); font-size: 11px; margin-top: 1px; }
+.pd-base { width: 100%; margin-top: 6px; border-radius: 12px 12px 0 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; font-size: 26px; font-weight: 850; color: rgba(0,0,0,.55); }
+.pd.p1 .pd-base { height: 100px; background: linear-gradient(180deg, #F8D464, #E3A91B); }
+.pd.p2 .pd-base { height: 74px; background: linear-gradient(180deg, #DEE3EA, #B4BCC8); }
+.pd.p3 .pd-base { height: 56px; background: linear-gradient(180deg, #E5B27F, #C58450); }
+.pd.me .pd-av { box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,.18); }
+.pd.empty { opacity: .45; }
+.pd.empty .pd-av { background: var(--surface-2); color: var(--faint); }
