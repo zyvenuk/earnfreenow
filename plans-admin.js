@@ -44,6 +44,9 @@
     return function () { return chosen; };
   }
 
+  // shared with the promotion services screen
+  A.picker = picker; A.bindPicker = bindPicker; A.upload = upload; A.removeFile = removeFile;
+
   /* ---------------- Plans ---------------- */
   A.plans = async function (body, ctx) {
     var res = await Promise.all([sb.rpc('admin_list_plans'), sb.from('platform_settings').select('*').eq('id', true).single()]);

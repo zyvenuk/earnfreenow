@@ -11,7 +11,8 @@
     support: { title: 'Support', back: '/profile', tab: 'profile' },
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
-    leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' }
+    leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' },
+    promotions: { title: 'Promotions', back: '/home', tab: 'home' }
   };
   var AUTH_ROUTES = ['login', 'signup', 'forgot', 'verify'];
 

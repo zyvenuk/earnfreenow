@@ -204,7 +204,7 @@
     /* ---- Transactions (wallet history), folded to 2 rows; server paging after expanding ---- */
     var TXF = {
       all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
-      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'], other: ['admin_adjustment', 'admin_reward', 'plan_purchase']
+      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'], other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund']
     };
     var txF = 'all', txItems = [], txDone = false, txLoading = false, txExpanded = false;
     var txBox = Z.$('#tx', el), txMore = Z.$('#txmore', el);

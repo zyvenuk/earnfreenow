@@ -609,3 +609,8 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .pd.me .pd-av { box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,.18); }
 .pd.empty { opacity: .45; }
 .pd.empty .pd-av { background: var(--surface-2); color: var(--faint); }
+
+/* ---------- Promotions ---------- */
+.promo-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: visible; margin-bottom: 12px; }
+.pos-badge { flex: none; min-width: 38px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13.5px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.promo-card .summary .kv a.link { font-weight: 650; }

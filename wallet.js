@@ -15,7 +15,9 @@
     referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
     referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
     admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' },
-    plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' }
+    plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' },
+    promo_payment: { label: 'Promotion payment', icon: 'megaphone', cls: 'neg' },
+    promo_refund: { label: 'Promotion refund', icon: 'refresh', cls: 'pos' }
   };
   Z.TX = TX;
 
@@ -59,6 +61,7 @@
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
 
     html += Z.leaderboard.homeCard();
+    html += Z.promos.homeCard();
     html += Z.plans.homeCard(pst);
     html += Z.followCard();
     html += Z.pwa.cards();
