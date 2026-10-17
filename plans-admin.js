@@ -60,7 +60,7 @@
       '<form class="card form" id="rules" novalidate><h3 class="mini-title" style="margin:0">Plan rules</h3>' +
       Z.switchEl('pe', st.plans_enabled, 'Plans system enabled') +
       '<p class="hint" style="margin-top:-6px">OFF: ads work as before. ON: users need an active plan to watch ads, and the plan sets their daily limit and reward per ad.</p>' +
-      Z.field({ id: 'pp', label: 'Several plans at once', type: 'select', value: st.plan_policy, options: [['highest', 'Allowed. The best plan is used; limits never add up'], ['one_active', 'Not allowed. One active plan per user']] }) +
+      Z.field({ id: 'pp', label: 'Several plans at once', type: 'select', value: st.plan_policy, options: [['combined', 'Allowed. Plans combine: lowest daily ads, rewards added together'], ['one_active', 'Not allowed. One active plan per user']] }) +
       Z.field({ id: 'pm', label: 'Max plans per user (all time)', value: st.plan_max_per_user, placeholder: 'No limit', attrs: 'inputmode="numeric"' }) +
       Z.switchEl('pr', st.plan_allow_repurchase, 'Same plan can be activated again after it ends') +
       Z.switchEl('pf', st.plan_free_counts, 'Free plans count toward the per-user limit') +

@@ -71,13 +71,14 @@
         '<button class="btn btn-primary btn-block" data-go="/plans">Browse plans</button></div>';
     }
     var lim = c.daily_ad_limit, done = Math.min(st.done_today, lim), pct = Math.round(done / lim * 100);
+    var multi = c.count > 1;
     return '<div class="card plan-now"><div class="pn-head">' + P.logo(c.logo_path) +
-      '<div class="row-main"><span class="row-title">' + Z.esc(c.name) + ' ' + P.tag(c.plan_type) + '</span>' +
-      '<span class="row-sub">Expires ' + Z.fmtDate(c.expires_at) + '</span></div></div>' +
+      '<div class="row-main"><span class="row-title">' + Z.esc(c.name) + ' ' + (multi ? '<span class="ptag use">' + c.count + ' PLANS</span>' : P.tag(c.plan_type)) + '</span>' +
+      '<span class="row-sub">' + (multi ? 'Next plan ends ' : 'Expires ') + Z.fmtDate(c.expires_at) + '</span></div></div>' +
       '<div class="pn-stats"><div><b>' + done + '/' + lim + '</b><span>Ads today</span></div><div><b>' + st.remaining + '</b><span>Remaining</span></div>' +
       '<div><b>' + Z.money(c.reward_per_ad) + '</b><span>Per ad</span></div></div>' +
       '<div class="pn-bar"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="pn-foot"><span data-left="' + c.expires_at + '"></span>' +
+      '<div class="pn-foot"><span>Today\u2019s rewards ' + Z.money(st.quota.total) + (multi ? ' (all plans combined)' : '') + '</span><span data-left="' + c.expires_at + '"></span>' +
       (st.remaining < 1 ? '<span class="pn-wait">Daily limit reached. New ads in ' + P.until(st.reset_at) + '.</span>' : '') + '</div>' +
       '<button class="btn btn-tonal btn-block" data-go="/plans">View plans</button></div>';
   };
@@ -130,6 +131,19 @@
         '<div class="kv total"><span>Time left</span><b data-left="' + a.expires_at + '"></b></div></div></div>';
     }
 
+    function quotaCard() {
+      var qd = st.quota;
+      if (!qd || !qd.plan_count) return '';
+      var per = qd.remaining > 0 ? qd.next_reward : qd.base;
+      return '<div class="card plan-mine"><div class="pn-head"><span class="row-ic acc">' + Z.icon('layout') + '</span>' +
+        '<div class="row-main"><span class="row-title">Today\u2019s plan calculation</span><span class="row-sub">' + plural(qd.plan_count, 'plan') + ' counted today</span></div></div>' +
+        '<div class="summary"><div class="kv"><span>Daily ads (the lowest of your plans)</span><b>' + qd.ads + '</b></div>' +
+        '<div class="kv"><span>Combined daily rewards (all plans added)</span><b>' + Z.money(qd.total) + '</b></div>' +
+        '<div class="kv total"><span>Reward per ad</span><b>' + Z.money(per) + '</b></div>' +
+        '<div class="kv"><span>Done today</span><b>' + qd.done + ' of ' + qd.ads + ' ads \u00b7 ' + Z.money(qd.earned) + '</b></div></div>' +
+        '<p class="plan-note">Reward per ad = combined daily rewards \u00f7 daily ads (the last ad of the day takes any leftover paisa). A plan that ends today still counts until tomorrow. A plan you activate after your first ad of the day counts from tomorrow.</p></div>';
+    }
+
     function card(p) {
       var pot = P.potential(p), mineInfo = p.mine, blocked = p.blocked, canBuy = !blocked, paid = p.plan_type === 'paid';
       var reason = blocked && blocked !== 'plan_already_active'
@@ -154,7 +168,7 @@
       '<div class="card info-card"><div class="ic-line"><span>Main Wallet balance</span><b>' + Z.money(balance) + '</b></div>' +
       '<div class="ic-line small"><span>Paid plans are bought from this balance only</span></div></div>' +
       '<div class="section-head"><h3>Your plan</h3></div>' +
-      (st.active_plans.length ? st.active_plans.map(mine).join('') :
+      (st.active_plans.length ? st.active_plans.map(mine).join('') + quotaCard() :
         '<div class="alert a-warn">' + Z.icon('alert') + '<div>You have no active plan. Activate one below to start watching ads.' +
         (st.last_expired ? ' Your last plan, ' + Z.esc(st.last_expired.name) + ', ended on ' + Z.fmtDay(st.last_expired.expired_at) + '.' : '') + '</div></div>') +
       '<div class="section-head"><h3>Available plans</h3></div>' +
@@ -174,6 +188,8 @@
           '<div class="kv"><span>Ads per day</span><b>' + p.daily_ad_limit + '</b></div><div class="kv"><span>Reward per ad</span><b>' + Z.money(p.reward_per_ad) + '</b></div>' +
           '<div class="kv"><span>Duration</span><b>' + p.duration_days + ' days</b></div>' +
           '<div class="kv total"><span>Potential rewards</span><b>' + Z.money(pot.total) + '</b></div></div>' +
+          '<p class="muted small">' + (st.done_today > 0 && st.quota && st.quota.plan_count > 0
+            ? 'You already completed ads today, so this plan counts toward your daily ads and rewards from <b>tomorrow</b>. ' : 'This plan counts toward your daily ads and rewards <b>from today</b>. ') + '</p>' +
           '<p class="muted small">Potential rewards are not guaranteed. ' + (paid ? 'The price is taken from your Main Wallet now and is not refunded when the plan ends.' : 'Free plans cost nothing.') + '</p>',
         confirm: paid ? 'Buy for ' + Z.money(p.price) : 'Activate'
       });
