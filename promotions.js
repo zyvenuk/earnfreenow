@@ -55,6 +55,45 @@
       '<div class="kv"><span>' + (p.status === 'expired' ? 'Expired' : 'Expires') + '</span><b>' + (p.expires_at ? Z.fmtDate(p.expires_at) : 'After approval') + '</b></div></div></div>';
   }
 
+  /* Browse tab: approved promotions only, with a search bar and service / category filters. */
+  Z.views.browse = async function (el, ctx) {
+    await Z.refreshSettings();
+    if (ctx.stale()) return;
+    if (!PR.enabled()) { el.innerHTML = '<section class="page">' + Z.empty({ icon: 'search', title: 'Browse is not available', text: 'Check back soon.' }) + '</section>'; return; }
+    var cr = await sb.rpc('promo_catalog');
+    if (ctx.stale()) return;
+    if (cr.error) throw cr.error;
+    var cat = cr.data, q = '', svc = '', catg = '', items = [], done = false, loading = false, seq = 0;
+
+    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>Browse</h2><p class="sub">Discover channels and accounts.</p></div></div>' +
+      '<div class="search">' + Z.icon('search') + '<input class="input" id="psq" type="search" placeholder="Search channels and accounts" autocomplete="off"></div>' +
+      '<div class="two">' + Z.field({ id: 'psv', label: 'Service', type: 'select', value: '', options: [['', 'All services']].concat(cat.services.map(function (s) { return [s.id, s.name]; })) }) +
+      Z.field({ id: 'pct', label: 'Category', type: 'select', value: '', options: [['', 'All categories']].concat(cat.categories.map(function (c) { return [c, c]; })) }) + '</div>' +
+      '<div id="plist"></div><div id="pmore"></div></section>';
+    var list = Z.$('#plist', el), more = Z.$('#pmore', el);
+
+    async function load(reset) {
+      if (loading && !reset) return;
+      var my = ++seq; loading = true;   // a newer search/filter makes older responses obsolete
+      if (reset) { items = []; done = false; list.innerHTML = Z.skel(3, 150); more.innerHTML = ''; }
+      var r = await sb.rpc('list_promotions', { p_search: q || null, p_service: svc || null, p_category: catg || null, p_limit: 30, p_offset: items.length });
+      if (my !== seq) return;
+      loading = false;
+      if (ctx.stale()) return;
+      if (r.error) { list.innerHTML = Z.errorState(); Z.$('[data-retry]', list).addEventListener('click', function () { load(true); }); return; }
+      items = items.concat(r.data || []); done = (r.data || []).length < 30;
+      list.innerHTML = items.length ? items.map(card).join('') : '<div class="card">' + Z.empty({ icon: 'search', title: 'No promotions found', text: q || svc || catg ? 'Try a different search or filter.' : 'Nothing to browse yet. Check back soon.' }) + '</div>';
+      more.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="pmb">Load more</button>';
+      var b = Z.$('#pmb', more); if (b) b.addEventListener('click', function () { Z.busy(b, true); load(false); });
+    }
+
+    Z.$('#psq', el).addEventListener('input', Z.debounce(function (e) { q = e.target.value.trim(); load(true); }, 300));
+    Z.$('#psv', el).addEventListener('change', function (e) { svc = e.target.value; load(true); });
+    Z.$('#pct', el).addEventListener('change', function (e) { catg = e.target.value; load(true); });
+    load(true);
+  };
+
+  /* Promotions page (reached from Home): promote your own channel and see your requests. */
   Z.views.promotions = async function (el, ctx) {
     await Z.refreshSettings();
     if (ctx.stale()) return;
@@ -62,65 +101,23 @@
     var cr = await sb.rpc('promo_catalog');
     if (ctx.stale()) return;
     if (cr.error) throw cr.error;
-    var cat = cr.data, tab = 'browse', q = '', svc = '', catg = '', items = [], done = false, loading = false;
+    var cat = cr.data;
 
-    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>Promotions</h2><p class="sub">Discover channels and accounts, or promote your own.</p></div></div>' +
+    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>My Promotions</h2><p class="sub">Promote your channel or account and track your requests. To discover others, open Browse.</p></div></div>' +
       '<button class="btn btn-primary btn-block" id="promote">' + Z.icon('megaphone') + 'Promote my channel</button>' +
-      '<div class="seg"><button class="seg-btn on" data-t="browse">Browse</button><button class="seg-btn" data-t="mine">My Promotions</button></div>' +
       '<div id="pbody"></div></section>';
     var body = Z.$('#pbody', el);
-
-    function filters() {
-      return '<div class="search">' + Z.icon('search') + '<input class="input" id="psq" type="search" placeholder="Search channels and accounts" value="' + Z.esc(q) + '" autocomplete="off"></div>' +
-        '<div class="two">' + Z.field({ id: 'psv', label: 'Service', type: 'select', value: svc, options: [['', 'All services']].concat(cat.services.map(function (s) { return [s.id, s.name]; })) }) +
-        Z.field({ id: 'pct', label: 'Category', type: 'select', value: catg, options: [['', 'All categories']].concat(cat.categories.map(function (c) { return [c, c]; })) }) + '</div>' +
-        '<div id="plist"></div><div id="pmore"></div>';
-    }
-
-    async function load(reset) {
-      var list = Z.$('#plist', body), more = Z.$('#pmore', body);
-      if (!list || loading) return; loading = true;
-      if (reset) { items = []; done = false; list.innerHTML = Z.skel(3, 150); more.innerHTML = ''; }
-      var r = await sb.rpc('list_promotions', { p_search: q || null, p_service: svc || null, p_category: catg || null, p_limit: 30, p_offset: items.length });
-      loading = false;
-      if (ctx.stale() || tab !== 'browse') return;
-      if (r.error) { list.innerHTML = Z.errorState(); Z.$('[data-retry]', list).addEventListener('click', function () { load(true); }); return; }
-      items = items.concat(r.data || []); done = (r.data || []).length < 30;
-      list.innerHTML = items.length ? items.map(card).join('') : '<div class="card">' + Z.empty({ icon: 'megaphone', title: 'No promotions found', text: q || svc || catg ? 'Try a different search or filter.' : 'Be the first to promote your channel.' }) + '</div>';
-      more.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="pmb">Load more</button>';
-      var b = Z.$('#pmb', more); if (b) b.addEventListener('click', function () { Z.busy(b, true); load(false); });
-    }
 
     async function showMine() {
       body.innerHTML = Z.skel(2, 220);
       var r = await sb.rpc('my_promotions');
-      if (ctx.stale() || tab !== 'mine') return;
+      if (ctx.stale()) return;
       if (r.error) { body.innerHTML = Z.errorState(); Z.$('[data-retry]', body).addEventListener('click', showMine); return; }
       body.innerHTML = (r.data || []).length ? r.data.map(mine).join('') : '<div class="card">' + Z.empty({ icon: 'megaphone', title: 'No promotions yet', text: 'Promote your channel or account to reach more people.' }) + '</div>';
     }
 
-    function showBrowse() {
-      body.innerHTML = filters();
-      Z.$('#psq', body).addEventListener('input', Z.debounce(function (e) { q = e.target.value.trim(); load(true); }, 300));
-      Z.$('#psv', body).addEventListener('change', function (e) { svc = e.target.value; load(true); });
-      Z.$('#pct', body).addEventListener('change', function (e) { catg = e.target.value; load(true); });
-      load(true);
-    }
-
-    Z.$('.seg', el).addEventListener('click', function (e) {
-      var b = e.target.closest('[data-t]'); if (!b || b.getAttribute('data-t') === tab) return;
-      tab = b.getAttribute('data-t');
-      Z.$$('.seg-btn', el).forEach(function (x) { x.classList.toggle('on', x === b); });
-      if (tab === 'mine') showMine(); else showBrowse();
-    });
-    Z.$('#promote', el).addEventListener('click', function () {
-      createSheet(cat, function () {   // after a successful request: show it under My Promotions
-        tab = 'mine';
-        Z.$$('.seg-btn', el).forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-t') === 'mine'); });
-        showMine();
-      });
-    });
-    showBrowse();
+    Z.$('#promote', el).addEventListener('click', function () { createSheet(cat, showMine); });
+    showMine();
   };
 
   /* ---------------- Create a promotion ---------------- */

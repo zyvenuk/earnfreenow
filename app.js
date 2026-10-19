@@ -5,12 +5,13 @@
   var view = Z.$('#view');
   var tok = 0;
 
-  var TITLES = { home: 'Zyven', watch: 'Watch ads', plans: 'Plans', payout: 'Payout', profile: 'Profile' };
+  var TITLES = { home: 'Zyven', watch: 'Watch ads', plans: 'Plans', browse: 'Browse', profile: 'Profile' };
   // Screens opened from other screens (no bottom-nav tab of their own)
   var SUBS = {
     support: { title: 'Support', back: '/profile', tab: 'profile' },
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
+    payout: { title: 'Payout', back: '/profile', tab: 'profile' },
     leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' },
     promotions: { title: 'Promotions', back: '/home', tab: 'home' }
   };
@@ -34,7 +35,7 @@
     Z.$('#bar-back').hidden = !Z.backTarget;
     Z.$('#bar-logo').hidden = !!Z.backTarget;
     Z.$('#bar-bell').hidden = mode !== 'app' || name === 'notifications';
-    Z.$('#bar-balance').hidden = !(mode === 'app' && isTab && name !== 'home' && name !== 'payout');
+    Z.$('#bar-balance').hidden = !(mode === 'app' && isTab && name !== 'home');
     var active = sub ? sub.tab : name;
     Z.$$('.nav-item').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-tab') === active); });
     if (mode === 'app' && Z.state.summary) Z.updateBalanceChip();

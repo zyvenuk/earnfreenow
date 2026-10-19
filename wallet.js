@@ -150,6 +150,7 @@
       '<div class="row">' + '<span class="row-ic">' + Z.icon('clock') + '</span><span class="row-main"><span class="row-title">Member since</span></span><span class="amt muted">' + Z.fmtDay(s.created_at) + '</span></div>' +
       '</div>' +
       '<div class="card">' +
+      '<button class="row row-btn" data-go="/payout"><span class="row-ic acc">' + Z.icon('payout') + '</span><span class="row-main"><span class="row-title">Payout</span><span class="row-sub">Withdraw your earnings</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       Z.plans.profileRow(pst) +
       '<button class="row row-btn" id="verify"><span class="row-ic ' + (s.email_verified ? 'pos' : 'warn') + '">' + Z.icon('shield') + '</span>' +
       '<span class="row-main"><span class="row-title">Account verification</span><span class="row-sub">' + (s.email_verified ? 'Your Gmail / email is verified' : 'Not verified. Tap to verify') + '</span></span>' +
