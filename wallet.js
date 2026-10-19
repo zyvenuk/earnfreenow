@@ -32,6 +32,17 @@
       '</div>';
   };
 
+  /* One shared profile picture for every user (profile.png next to index.html). If the file is missing the initial stays visible. */
+  Z.avatarHtml = function (name, cls) {
+    var initial = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+    return '<span class="avatar ' + (cls || '') + '"><b class="av-i">' + Z.esc(initial) + '</b>' +
+      '<img src="profile.png" alt="" decoding="async" onerror="this.remove()"></span>';
+  };
+  function greeting() {
+    var h = new Date().getHours();
+    return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Good night';
+  }
+
   /* ---------------- Home ---------------- */
   Z.views.home = async function (el, ctx) {
     var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings().catch(function () {})]);
@@ -47,18 +58,23 @@
 
     html += Z.maint.notices(['platform', 'payout']);
 
+    html += '<button class="card me-card" data-go="/profile" aria-label="Open your profile">' + Z.avatarHtml(s.full_name) +
+      '<span class="me-text"><span class="me-hi">' + greeting() + '</span><b class="me-name">' + Z.esc(s.full_name || 'Member') + '</b>' +
+      '<span class="me-meta">' + Z.verBadge(s.email_verified) + '<span class="me-since">Since ' + Z.fmtDay(s.created_at) + '</span></span></span>' +
+      Z.icon('chevron', 'row-chev') + '</button>';
+
     html += '<div class="balance-card">' +
       '<span class="bc-label">Main Wallet balance</span>' +
       '<div class="bc-amount">' + Z.money(s.balance) + '</div>' +
-      '<button class="bc-ref" data-go="/referral"><span>Referral Wallet</span><b>' + Z.money(s.referral_balance) + '</b><em>locked</em></button>' +
       '<div class="bc-stats"><div><b>' + Z.money(s.today_earned) + '</b><span>Earned today</span></div>' +
-      '<div><b>' + s.today_views + '</b><span>Ads watched today</span></div></div>' +
+      '<div><b>' + s.today_views + '</b><span>Ads today</span></div>' +
+      '<button class="bc-ref" data-go="/referral"><b>' + Z.money(s.referral_balance) + '</b><span>Referral, locked</span></button></div>' +
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
       '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button></div></div>';
 
     html += '<div class="quick-grid">' +
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
-      '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Help &amp; support</b><span>We are here to help</span></span></button></div>';
+      '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Support</b><span>Get help</span></span></button></div>';
 
     html += Z.leaderboard.homeCard();
     html += Z.promos.homeCard();
@@ -140,10 +156,9 @@
     if (ctx.stale()) return;
     var pst = Z.plans.enabled() ? await Z.plans.status().catch(function () { return null; }) : null;
     if (ctx.stale()) return;
-    var initial = (s.full_name || '?').trim().charAt(0).toUpperCase();
 
     el.innerHTML = '<section class="page">' +
-      '<div class="profile-head"><div class="avatar">' + Z.esc(initial) + '</div>' +
+      '<div class="profile-head">' + Z.avatarHtml(s.full_name, 'lg') +
       '<div class="ph-text"><h2 id="pname">' + Z.esc(s.full_name) + '</h2><p>' + Z.esc(s.email) + '</p><div class="ph-badges">' + Z.verBadge(s.email_verified) + Z.badge(s.status) + '</div></div></div>' +
       '<div class="card">' +
       '<div class="row">' + '<span class="row-ic">' + Z.icon('coin') + '</span><span class="row-main"><span class="row-title">Total earned</span></span><span class="amt">' + Z.money(s.total_earned) + '</span></div>' +
@@ -189,7 +204,7 @@
           if (r.error) throw r.error;
           s.full_name = v; Z.state.summary.full_name = v;
           Z.$('#pname', el).textContent = v;
-          Z.$('.avatar', el).textContent = v.charAt(0).toUpperCase();
+          Z.$('.avatar .av-i', el).textContent = v.charAt(0).toUpperCase();
           sh.close(); Z.toast('Name updated', 'ok');
         }, Z.$('#nerr', sh.el));
       });
