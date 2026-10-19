@@ -519,6 +519,8 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .plan-logo { position: relative; width: 48px; height: 48px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; }
 .plan-logo.sm { width: 38px; height: 38px; border-radius: 11px; }
 .plan-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--surface); }
+.plan-logo img.real { opacity: 0; transition: opacity .25s ease; }
+.plan-logo img.real.ok { opacity: 1; }
 .plan-badge { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--warn-soft); color: var(--warn); font-size: 12px; font-weight: 700; white-space: nowrap; flex: none; }
 .plan-badge img { width: 16px; height: 16px; object-fit: contain; }
 .ptag { display: inline-block; font-size: 11px; font-weight: 750; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; vertical-align: 1px; }

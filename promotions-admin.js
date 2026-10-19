@@ -140,7 +140,7 @@
       if (p.status === 'pending') acts = '<button class="btn btn-primary btn-sm" data-act="approve">Approve</button><button class="btn btn-danger-ghost btn-sm" data-act="reject">Reject</button>';
       else if (p.status === 'active') acts = '<button class="btn btn-tonal btn-sm" data-act="move">Move position</button><button class="btn btn-tonal btn-sm" data-act="suspend">Suspend</button><button class="btn btn-danger-ghost btn-sm" data-act="remove">Remove</button>';
       else if (p.status === 'suspended') acts = '<button class="btn btn-primary btn-sm" data-act="reactivate">Reactivate</button><button class="btn btn-danger-ghost btn-sm" data-act="remove">Remove</button>';
-      return '<div class="card plan-card admin" data-id="' + p.id + '"><div class="plan-top">' + Z.plans.logo(p.logo_path) +
+      return '<div class="card plan-card admin" data-id="' + p.id + '"><div class="plan-top">' + (Z.promos ? Z.promos.logo(p) : Z.plans.logo(p.logo_path)) +
         '<div class="plan-name"><b>' + Z.esc(p.title) + '</b><span>' + Z.esc(p.service_name) + ' \u00b7 ' + Z.esc(p.category) + '</span></div>' + sbadge(p.status) + '</div>' +
         '<div class="summary"><div class="kv"><span>User</span><b>' + Z.esc(p.full_name) + '</b></div><div class="kv"><span>Email</span><b>' + Z.esc(p.email) + '</b></div>' +
         '<div class="kv"><span>Link</span><b><a class="link" href="' + Z.esc(p.link) + '" target="_blank" rel="noopener noreferrer nofollow">Open link</a></b></div>' +

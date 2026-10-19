@@ -22,6 +22,52 @@
       '<span class="row-main"><span class="row-title">Promotions</span><span class="row-sub">Discover channels or promote your own</span></span>' + Z.icon('chevron', 'row-chev') + '</button></div>';
   };
 
+  /* ---------- Logos ----------
+     The admin's service logo is always drawn first. The real logo of the promoted channel/account (looked up from the
+     link the user attached, through unavatar.io) is layered on top and fades in only once it has loaded.
+     While it loads, or if there is none, the service logo stays visible. */
+  var SAFE = /^[A-Za-z0-9._\-]{1,100}$/;
+  PR.realLogoUrl = function (link) {
+    var u;
+    try { u = new URL(link); } catch (e) { return ''; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    var host = u.hostname.toLowerCase().replace(/^(www|m|mobile|web)\./, '');
+    var seg = u.pathname.split('/').filter(Boolean).map(function (x) { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    var key = '', base = 'https://unavatar.io/';
+    function bad(a, list) { return list.indexOf((a || '').toLowerCase()) !== -1; }
+    if (host === 'youtube.com') {
+      if (seg[0] && seg[0].charAt(0) === '@') key = 'youtube/' + seg[0].slice(1);
+      else if (seg[0] === 'channel' && seg[1]) key = 'youtube/' + seg[1];
+      else if ((seg[0] === 'c' || seg[0] === 'user') && seg[1]) key = 'youtube/' + seg[1];
+    } else if (host === 'instagram.com') {
+      if (seg[0] && !bad(seg[0], ['p', 'reel', 'reels', 'stories', 'explore', 'tv', 'accounts', 'direct'])) key = 'instagram/' + seg[0];
+    } else if (host === 'tiktok.com') {
+      if (seg[0] && seg[0].charAt(0) === '@') key = 'tiktok/' + seg[0].slice(1);
+    } else if (host === 'x.com' || host === 'twitter.com') {
+      if (seg[0] && !bad(seg[0], ['i', 'home', 'intent', 'share', 'search', 'hashtag', 'explore', 'messages', 'settings'])) key = 'x/' + seg[0];
+    } else if (host === 'facebook.com' || host === 'fb.com') {
+      if (seg[0] === 'profile.php') key = 'facebook/' + (u.searchParams.get('id') || '');
+      else if (seg[0] === 'pages' && seg.length >= 3) key = 'facebook/' + seg[seg.length - 1];
+      else if (seg[0] && !bad(seg[0], ['groups', 'share', 'sharer', 'watch', 'events', 'story.php', 'photo', 'photos', 'reel', 'permalink.php', 'people', 'p'])) key = 'facebook/' + seg[0];
+    } else if (host === 'chat.whatsapp.com') {
+      if (seg[0]) key = 'whatsapp/chat:' + seg[0];
+    } else if (host === 'whatsapp.com') {
+      if (seg[0] === 'channel' && seg[1]) key = 'whatsapp/channel:' + seg[1];
+    }
+    var id = key.split('/')[1] || '';
+    id = id.replace(/^(chat|channel):/, '');
+    if (!key || !SAFE.test(id)) return '';
+    return base + key.replace(/^([a-z]+)\/(.*)$/, function (m, a, b) { return a + '/' + b.split(':').map(encodeURIComponent).join(':'); }) + '?fallback=false';
+  };
+
+  PR.logo = function (p) {
+    var real = PR.realLogoUrl(p.link);
+    return '<span class="plan-logo promo-logo">' + Z.icon('layout') +
+      (p.logo_path ? '<img src="' + Z.esc(Z.plans.url(p.logo_path)) + '" alt="" loading="lazy" onerror="this.remove()">' : '') +
+      (real ? '<img class="real" src="' + Z.esc(real) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="this.classList.add(\'ok\')" onerror="this.remove()">' : '') +
+      '</span>';
+  };
+
   // same arithmetic as the database (display only)
   function calc(svc, days, pos, D) {
     var dur = r2(days * Number(svc.price_per_day)), pp = 0, steps = 0;
@@ -33,7 +79,7 @@
   }
 
   function card(p) {
-    return '<div class="card promo-card"><div class="plan-top">' + Z.plans.logo(p.logo_path) +
+    return '<div class="card promo-card"><div class="plan-top">' + PR.logo(p) +
       '<div class="plan-name"><b>' + Z.esc(p.title) + '</b><span><i class="pop">' + Z.esc(p.service_name) + '</i> \u00b7 ' + Z.esc(p.category) + '</span></div>' +
       '<span class="pos-badge">#' + p.position + '</span></div>' +
       '<p class="plan-desc">' + Z.esc(p.description) + '</p>' +
@@ -42,7 +88,7 @@
 
   function mine(p) {
     var live = p.status === 'active';
-    return '<div class="card promo-card"><div class="plan-top">' + Z.plans.logo(p.logo_path) +
+    return '<div class="card promo-card"><div class="plan-top">' + PR.logo(p) +
       '<div class="plan-name"><b>' + Z.esc(p.title) + '</b><span>' + Z.esc(p.service_name) + ' \u00b7 ' + Z.esc(p.category) + '</span></div>' + sbadge(p.status) + '</div>' +
       '<p class="plan-desc">' + Z.esc(p.description) + '</p>' +
       (p.status === 'rejected' && p.reject_reason ? '<div class="alert a-error">' + Z.icon('info') + '<div><b>Rejected:</b> ' + Z.esc(p.reject_reason) + '<br><small>Your payment was returned to your Main Wallet.</small></div></div>' : '') +
@@ -69,7 +115,8 @@
       '<div class="search">' + Z.icon('search') + '<input class="input" id="psq" type="search" placeholder="Search channels and accounts" autocomplete="off"></div>' +
       '<div class="two">' + Z.field({ id: 'psv', label: 'Service', type: 'select', value: '', options: [['', 'All services']].concat(cat.services.map(function (s) { return [s.id, s.name]; })) }) +
       Z.field({ id: 'pct', label: 'Category', type: 'select', value: '', options: [['', 'All categories']].concat(cat.categories.map(function (c) { return [c, c]; })) }) + '</div>' +
-      '<div id="plist"></div><div id="pmore"></div></section>';
+      '<div id="plist"></div><div id="pmore"></div>' +
+      '<p class="muted small center">Profile pictures by <a class="link" href="https://unavatar.io" target="_blank" rel="noopener noreferrer">unavatar.io</a></p></section>';
     var list = Z.$('#plist', el), more = Z.$('#pmore', el);
 
     async function load(reset) {
