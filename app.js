@@ -16,6 +16,7 @@
     promotions: { title: 'Promotions', back: '/home', tab: 'home' }
   };
   var AUTH_ROUTES = ['login', 'signup', 'forgot', 'verify'];
+  Z.isRoute = function (name) { return !!(TITLES[name] || SUBS[name]); };   // used by banners to accept only real in-app pages
 
   Z.ready = false;
   Z.recovery = false;

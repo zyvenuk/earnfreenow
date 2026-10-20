@@ -631,3 +631,27 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .promo-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: visible; margin-bottom: 12px; }
 .pos-badge { flex: none; min-width: 38px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13.5px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .promo-card .summary .kv a.link { font-weight: 650; }
+
+/* ---------- Home: promotional banner carousel ---------- */
+.bn[hidden] { display: none; }
+.bn-view { position: relative; overflow: hidden; border-radius: var(--r-lg); aspect-ratio: 16 / 7; background: var(--surface-2); box-shadow: var(--shadow); touch-action: pan-y; -webkit-user-select: none; user-select: none; contain: layout paint; }
+.bn-track { display: flex; height: 100%; transition: transform .5s cubic-bezier(.22, .8, .28, 1); will-change: transform; }
+.bn-slide { position: relative; flex: 0 0 100%; width: 100%; height: 100%; display: block; margin: 0; padding: 0; border: 0; background: var(--surface-2); color: inherit; font: inherit; text-align: left; }
+.bn-slide.link { cursor: pointer; }
+.bn-slide img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease; -webkit-user-drag: none; pointer-events: none; }
+.bn-slide img.ok { opacity: 1; }
+.bn-dots { display: flex; justify-content: center; gap: 0; margin-top: 4px; }
+.bn-dot { width: 20px; height: 20px; padding: 0; border: 0; background: none; display: grid; place-items: center; }
+.bn-dot::before { content: ''; width: 6px; height: 6px; border-radius: 3px; background: var(--faint); opacity: .45; transition: width .25s ease, opacity .25s ease, background .25s ease; }
+.bn-dot.on::before { width: 18px; background: var(--accent); opacity: 1; }
+.bn-skel { aspect-ratio: 16 / 7; border-radius: var(--r-lg); height: auto !important; }
+.bn-err { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; color: var(--muted); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .bn-track, .bn-slide img, .bn-dot::before { transition: none; } }
+
+/* ---------- Admin: banner management ---------- */
+.banner-card { display: flex; flex-direction: column; }
+.banner-prev { position: relative; aspect-ratio: 16 / 7; background: var(--surface-2); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.banner-prev img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.banner-prev.big { border-radius: var(--r-md); border: 1px solid var(--line); margin-bottom: 8px; }
+.banner-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.kv b.wrap { white-space: normal; word-break: break-all; text-align: right; }

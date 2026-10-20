@@ -72,6 +72,8 @@
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
       '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button></div></div>';
 
+    html += Z.banners.slot();   // promotional carousel (filled from the database, hidden when there is nothing to show)
+
     html += '<div class="quick-grid">' +
       '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
       '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Support</b><span>Get help</span></span></button></div>';
@@ -106,6 +108,7 @@
     el.innerHTML = html;
     if (pst) Z.plans.tickLeft(el);
     Z.pwa.bindCards(el);
+    Z.banners.mount(Z.$('#bn', el), ctx);
     Z.slots.attach(el, ctx);
   };
 
