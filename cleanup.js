@@ -66,14 +66,15 @@
       var b = this;
       Z.run(b, async function () {
         var used = {};
-        var q = await Promise.all([sb.from('plans').select('logo_path'), sb.from('plan_badges').select('image_path'), sb.from('promo_services').select('logo_path'), sb.from('banners').select('image_path')]);
-        if (q[0].error || q[1].error || q[2].error || q[3].error) throw (q[0].error || q[1].error || q[2].error || q[3].error);
+        var q = await Promise.all([sb.from('plans').select('logo_path'), sb.from('plan_badges').select('image_path'), sb.from('promo_services').select('logo_path'), sb.from('banners').select('image_path'), sb.from('store_apps').select('icon_path')]);
+        if (q[0].error || q[1].error || q[2].error || q[3].error || q[4].error) throw (q[0].error || q[1].error || q[2].error || q[3].error || q[4].error);
+        (q[4].data || []).forEach(function (p) { if (p.icon_path) used[p.icon_path] = 1; });
         (q[3].data || []).forEach(function (p) { if (p.image_path) used[p.image_path] = 1; });
         (q[2].data || []).forEach(function (p) { if (p.logo_path) used[p.logo_path] = 1; });
         (q[0].data || []).forEach(function (p) { if (p.logo_path) used[p.logo_path] = 1; });
         (q[1].data || []).forEach(function (p) { if (p.image_path) used[p.image_path] = 1; });
         var orphans = [], bytes = 0, cutoff = Date.now() - 3600 * 1000;   // newer than 1 hour: maybe still being saved
-        for (var f of ['plans', 'badges', 'promo', 'banners']) {
+        for (var f of ['plans', 'badges', 'promo', 'banners', 'apps']) {
           var l = await sb.storage.from(BUCKET).list(f, { limit: 1000 });
           if (l.error) throw l.error;
           (l.data || []).forEach(function (o) {

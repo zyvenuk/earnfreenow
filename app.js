@@ -12,6 +12,9 @@
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
     payout: { title: 'Payout', back: '/profile', tab: 'profile' },
+    apps: { title: 'Premium Apps', back: '/home', tab: 'home' },
+    myapps: { title: 'My Apps', back: '/apps', tab: 'home' },
+    myplans: { title: 'My Plans', back: '/plans', tab: 'plans' },
     leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' },
     promotions: { title: 'Promotions', back: '/home', tab: 'home' }
   };
@@ -55,6 +58,15 @@
     var root = parts[0] || '', sub = parts[1] || '';
     if (root === 'wallet') { root = 'payout'; history.replaceState(null, '', '#/payout'); }   // the Wallet page is gone: old links go to Payout
     var name, mode = 'app';
+    if (root === 'payout' && Z.state.user) {   // the admin can hide the Payout page completely
+      await Z.refreshSettings(false, 30000).catch(function () { /* keep the last known settings */ });
+      if (!Z.payoutVisible()) { history.replaceState(null, '', '#/home'); root = 'home'; sub = ''; }
+    }
+
+    if ((root === 'apps' || root === 'myapps') && Z.state.user) {   // the admin can hide Premium Apps completely
+      await Z.refreshSettings(false, 30000).catch(function () { /* keep the last known settings */ });
+      if (!Z.appsVisible()) { history.replaceState(null, '', '#/home'); root = 'home'; sub = ''; }
+    }
 
     if (Z.recovery) { name = 'reset'; mode = 'auth'; }
     else if (!Z.state.user) {

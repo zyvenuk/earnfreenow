@@ -4,23 +4,21 @@
   var Z = window.Z;
 
   var TYPES = {
-    banner: { icon: 'layout', label: 'Banner' },
-    native: { icon: 'layout', label: 'Native' },
-    video: { icon: 'play', label: 'Video' },
-    direct_link: { icon: 'external', label: 'Offer' }
+    video: { icon: 'film', label: 'Video', tone: 'video' },
+    banner: { icon: 'image', label: 'Banner', tone: 'banner' },
+    native: { icon: 'sparkle', label: 'Sponsored', tone: 'native' },
+    direct_link: { icon: 'bolt', label: 'Offer', tone: 'offer' }
   };
 
   function adCard(a) {
     var t = TYPES[a.ad_type] || TYPES.banner;
-    var done = !a.available;
-    var doneText = a.daily_limit && a.done_today >= a.daily_limit ? 'Done for today' : 'Completed';
-    return '<button class="ad-card' + (done ? ' is-done' : '') + '" data-ad="' + a.id + '"' + (done ? ' aria-disabled="true"' : '') + '>' +
-      '<span class="ad-ic">' + Z.icon(done ? 'check' : t.icon) + '</span>' +
+    return '<button class="ad-card" data-ad="' + a.id + '">' +
+      '<span class="ad-ic tone-' + t.tone + '">' + Z.icon(t.icon) + '</span>' +
       '<span class="ad-main"><span class="ad-title">' + Z.esc(a.title) + '</span>' +
       '<span class="ad-sub">' + (a.description ? Z.esc(a.description) : t.label) + '</span>' +
       '<span class="ad-meta">' + Z.icon('clock') + a.duration_seconds + 's' +
       (a.daily_limit ? '<i></i>' + Math.min(a.done_today, a.daily_limit) + '/' + a.daily_limit + ' today' : '') + '</span></span>' +
-      (done ? '<span class="ad-done">' + doneText + '</span>' : '<span class="ad-reward">' + Z.money(a.reward, { sign: true }) + '</span>') +
+      '<span class="ad-reward">' + Z.money(a.reward, { sign: true }) + '</span>' +
       '</button>';
   }
 
@@ -40,16 +38,20 @@
       Z.$('[data-retry]', list).addEventListener('click', function () { Z.route(); });
       return;
     }
-    var ads = r.data || [];
+    var all = r.data || [];
+    var ads = all.filter(function (a) { return a.available; });   // only ads the user can do right now
     Z.state.ads = ads;
     if (plansOn && pst && !pst.current) { list.innerHTML = Z.maint.notices(['platform']) + '<div class="card">' + Z.plans.noPlan() + '</div>'; return; }
-    var head = plansOn && pst ? Z.plans.watchHeader(pst) : '';
     if (!ads.length) {
-      list.innerHTML = Z.maint.notices(['platform']) + head + (plansOn && pst && pst.remaining < 1 ? '' :
-        '<div class="card">' + Z.empty({ icon: 'play', title: 'No ads right now', text: 'New ads appear here when they are available. Check back soon.' }) + '</div>');
+      var limitHit = plansOn && pst && pst.remaining < 1;
+      list.innerHTML = Z.maint.notices(['platform']) + '<div class="card">' + (limitHit
+        ? Z.empty({ icon: 'clock', title: 'Daily limit reached', text: 'New ads are available at ' + Z.fmtDate(pst.reset_at) + ' (in ' + Z.plans.until(pst.reset_at) + ').' })
+        : (all.length
+          ? Z.empty({ icon: 'check', title: 'All done for now', text: 'You have finished every available ad. New ads appear here when they are available.' })
+          : Z.empty({ icon: 'play', title: 'No ads right now', text: 'New ads appear here when they are available. Check back soon.' }))) + '</div>';
       return;
     }
-    var html = Z.maint.notices(['platform']) + head + Z.slots.html('watch_top');
+    var html = Z.maint.notices(['platform']) + Z.slots.html('watch_top');
     ads.forEach(function (a, i) {
       html += adCard(a);
       if (i === 1 && ads.length > 2) html += Z.slots.html('watch_between');
@@ -63,7 +65,6 @@
       if (!card) return;
       var ad = ads.filter(function (x) { return x.id === card.getAttribute('data-ad'); })[0];
       if (!ad) return;
-      if (!ad.available) return Z.toast('You have already completed this ad for now.');
       if (Z.state.summary && Z.state.summary.status === 'suspended') return Z.toast(Z.errMsg({ message: 'account_suspended' }), 'error');
       Z.viewer.open(ad);
     });

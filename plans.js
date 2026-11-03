@@ -80,7 +80,7 @@
       '<div class="pn-bar"><i style="width:' + pct + '%"></i></div>' +
       '<div class="pn-foot"><span>Today\u2019s rewards ' + Z.money(st.quota.total) + (multi ? ' (all plans combined)' : '') + '</span><span data-left="' + c.expires_at + '"></span>' +
       (st.remaining < 1 ? '<span class="pn-wait">Daily limit reached. New ads in ' + P.until(st.reset_at) + '.</span>' : '') + '</div>' +
-      '<button class="btn btn-tonal btn-block" data-go="/plans">View plans</button></div>';
+      '<button class="btn btn-tonal btn-block" data-go="/myplans">My plans</button></div>';
   };
 
   /* ---------- Watch: allowance bar ---------- */
@@ -100,7 +100,7 @@
   P.profileRow = function (st) {
     if (!st || !st.enabled) return '';
     var c = st.current;
-    return '<button class="row row-btn" data-go="/plans"><span class="row-ic acc">' + Z.icon('layout') + '</span>' +
+    return '<button class="row row-btn" data-go="/myplans"><span class="row-ic acc">' + Z.icon('layout') + '</span>' +
       '<span class="row-main"><span class="row-title">' + (c ? Z.esc(c.name) + ' \u00b7 ' + (c.plan_type === 'free' ? 'Free' : 'Paid') : 'No active plan') + '</span>' +
       '<span class="row-sub wrap">' + (c ? 'Activated ' + Z.fmtDay(c.activated_at) + ' \u00b7 Expires ' + Z.fmtDay(c.expires_at) + '<br><span data-left="' + c.expires_at + '"></span>' : 'Browse plans to start earning') + '</span></span>' +
       Z.icon('chevron', 'row-chev') + '</button>';
@@ -119,30 +119,6 @@
     if (res[0].error) throw res[0].error;
     P.offset = new Date(res[0].data.server_now).getTime() - Date.now();
     var plans = res[0].data.plans, st = res[1], sum = res[2], balance = Number(sum.balance);
-
-    function mine(a) {
-      return '<div class="card plan-mine"><div class="pn-head">' + P.logo(a.logo_path) +
-        '<div class="row-main"><span class="row-title">' + Z.esc(a.name) + ' ' + P.tag(a.plan_type) +
-        (st.current && st.current.user_plan_id === a.user_plan_id ? ' <span class="ptag use">IN USE</span>' : '') +
-        (a.status === 'paused' ? ' <span class="ptag paused">PAUSED</span>' : '') + '</span>' +
-        '<span class="row-sub">' + a.daily_ad_limit + ' ads/day \u00b7 ' + Z.money(a.reward_per_ad) + ' per ad</span></div></div>' +
-        '<div class="summary"><div class="kv"><span>Activated</span><b>' + Z.fmtDate(a.activated_at) + '</b></div>' +
-        '<div class="kv"><span>Expires</span><b>' + Z.fmtDate(a.expires_at) + '</b></div>' +
-        '<div class="kv total"><span>Time left</span><b data-left="' + a.expires_at + '"></b></div></div></div>';
-    }
-
-    function quotaCard() {
-      var qd = st.quota;
-      if (!qd || !qd.plan_count) return '';
-      var per = qd.remaining > 0 ? qd.next_reward : qd.base;
-      return '<div class="card plan-mine"><div class="pn-head"><span class="row-ic acc">' + Z.icon('layout') + '</span>' +
-        '<div class="row-main"><span class="row-title">Today\u2019s plan calculation</span><span class="row-sub">' + plural(qd.plan_count, 'plan') + ' counted today</span></div></div>' +
-        '<div class="summary"><div class="kv"><span>Daily ads (the lowest of your plans)</span><b>' + qd.ads + '</b></div>' +
-        '<div class="kv"><span>Combined daily rewards (all plans added)</span><b>' + Z.money(qd.total) + '</b></div>' +
-        '<div class="kv total"><span>Reward per ad</span><b>' + Z.money(per) + '</b></div>' +
-        '<div class="kv"><span>Done today</span><b>' + qd.done + ' of ' + qd.ads + ' ads \u00b7 ' + Z.money(qd.earned) + '</b></div></div>' +
-        '<p class="plan-note">Reward per ad = combined daily rewards \u00f7 daily ads (the last ad of the day takes any leftover paisa). A plan that ends today still counts until tomorrow. A plan you activate after your first ad of the day counts from tomorrow.</p></div>';
-    }
 
     function card(p) {
       var pot = P.potential(p), mineInfo = p.mine, blocked = p.blocked, canBuy = !blocked, paid = p.plan_type === 'paid';
@@ -164,15 +140,20 @@
         btn + (reason ? '<p class="plan-reason">' + Z.esc(reason) + '</p>' : '') + '</div>';
     }
 
+    var open = plans.filter(function (p) { return p.blocked !== 'plan_already_active'; });   // plans you already run are on My Plans
+    var nActive = st.active_plans.length;
     el.innerHTML = '<section class="page">' +
       '<div class="card info-card"><div class="ic-line"><span>Main Wallet balance</span><b>' + Z.money(balance) + '</b></div>' +
       '<div class="ic-line small"><span>Paid plans are bought from this balance only</span></div></div>' +
-      '<div class="section-head"><h3>Your plan</h3></div>' +
-      (st.active_plans.length ? st.active_plans.map(mine).join('') + quotaCard() :
-        '<div class="alert a-warn">' + Z.icon('alert') + '<div>You have no active plan. Activate one below to start watching ads.' +
+      '<div class="card"><button class="row row-btn" data-go="/myplans"><span class="row-ic acc">' + Z.icon('crown') + '</span>' +
+      '<span class="row-main"><span class="row-title">My plans</span><span class="row-sub">' + (nActive ? plural(nActive, 'active plan') + ' \u00b7 see time left' : 'No active plan yet') + '</span></span>' +
+      Z.icon('chevron', 'row-chev') + '</button></div>' +
+      (nActive ? '' : '<div class="alert a-warn">' + Z.icon('alert') + '<div>You have no active plan. Activate one below to start watching ads.' +
         (st.last_expired ? ' Your last plan, ' + Z.esc(st.last_expired.name) + ', ended on ' + Z.fmtDay(st.last_expired.expired_at) + '.' : '') + '</div></div>') +
       '<div class="section-head"><h3>Available plans</h3></div>' +
-      (plans.length ? plans.map(card).join('') : '<div class="card">' + Z.empty({ icon: 'layout', title: 'No plans yet', text: 'New plans will appear here.' }) + '</div>') +
+      (open.length ? open.map(card).join('') : '<div class="card">' + Z.empty(plans.length
+        ? { icon: 'check', title: 'All plans are active', text: 'Every available plan is already running. See My plans for the time left.' }
+        : { icon: 'layout', title: 'No plans yet', text: 'New plans will appear here.' }) + '</div>') +
       Z.slots.html('wallet_bottom') + '</section>';
     tickLeft(el);
     Z.slots.attach(el, ctx);
@@ -208,5 +189,46 @@
         Z.route();
       });
     });
+  };
+  /* ---------- My plans (separate screen) ---------- */
+  Z.views.myplans = async function (el, ctx) {
+    await Z.refreshSettings();
+    if (ctx.stale()) return;
+    if (!P.enabled()) { el.innerHTML = '<section class="page">' + Z.empty({ icon: 'layout', title: 'Plans are not available yet', text: 'Check back soon.' }) + '</section>'; return; }
+    var st = await P.status(true);
+    if (ctx.stale()) return;
+
+    function mine(a) {
+      return '<div class="card plan-mine"><div class="pn-head">' + P.logo(a.logo_path) +
+        '<div class="row-main"><span class="row-title">' + Z.esc(a.name) + ' ' + P.tag(a.plan_type) +
+        (st.current && st.current.user_plan_id === a.user_plan_id ? ' <span class="ptag use">IN USE</span>' : '') +
+        (a.status === 'paused' ? ' <span class="ptag paused">PAUSED</span>' : '') + '</span>' +
+        '<span class="row-sub">' + a.daily_ad_limit + ' ads/day \u00b7 ' + Z.money(a.reward_per_ad) + ' per ad</span></div></div>' +
+        '<div class="summary"><div class="kv"><span>Activated</span><b>' + Z.fmtDate(a.activated_at) + '</b></div>' +
+        '<div class="kv"><span>Expires</span><b>' + Z.fmtDate(a.expires_at) + '</b></div>' +
+        '<div class="kv total"><span>Time left</span><b data-left="' + a.expires_at + '"></b></div></div></div>';
+    }
+
+    function quotaCard() {
+      var qd = st.quota;
+      if (!qd || !qd.plan_count) return '';
+      var per = qd.remaining > 0 ? qd.next_reward : qd.base;
+      return '<div class="card plan-mine"><div class="pn-head"><span class="row-ic acc">' + Z.icon('layout') + '</span>' +
+        '<div class="row-main"><span class="row-title">Today\u2019s plan calculation</span><span class="row-sub">' + plural(qd.plan_count, 'plan') + ' counted today</span></div></div>' +
+        '<div class="summary"><div class="kv"><span>Daily ads (the lowest of your plans)</span><b>' + qd.ads + '</b></div>' +
+        '<div class="kv"><span>Combined daily rewards (all plans added)</span><b>' + Z.money(qd.total) + '</b></div>' +
+        '<div class="kv total"><span>Reward per ad</span><b>' + Z.money(per) + '</b></div>' +
+        '<div class="kv"><span>Done today</span><b>' + qd.done + ' of ' + qd.ads + ' ads \u00b7 ' + Z.money(qd.earned) + '</b></div></div>' +
+        '<p class="plan-note">Reward per ad = combined daily rewards \u00f7 daily ads (the last ad of the day takes any leftover paisa). A plan that ends today still counts until tomorrow. A plan you activate after your first ad of the day counts from tomorrow.</p></div>';
+    }
+
+
+    el.innerHTML = '<section class="page"><div class="page-head"><div><h2>My plans</h2><p class="sub">Your running plans and what they give you today.</p></div></div>' +
+      (st.active_plans.length ? st.active_plans.map(mine).join('') + quotaCard() :
+        '<div class="card">' + Z.empty({ icon: 'layout', title: 'No active plan', text: 'Activate a free plan or buy a paid plan to start watching ads.' +
+          (st.last_expired ? ' Your last plan, ' + st.last_expired.name + ', ended on ' + Z.fmtDay(st.last_expired.expired_at) + '.' : ''),
+          action: '<button class="btn btn-primary" data-go="/plans">Browse plans</button>' }) + '</div>') +
+      (st.active_plans.length ? '<button class="btn btn-tonal btn-block" data-go="/plans">Browse more plans</button>' : '') + '</section>';
+    tickLeft(el);
   };
 })();

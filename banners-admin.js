@@ -5,8 +5,8 @@
   var Z = window.Z;
   var BA = Z.bannersAdmin = {};
   var BUCKET = 'plan-assets', W = 1280, H = 560;   // 16:7, same ratio the carousel shows
-  var PAGES = [['/home', 'Home'], ['/watch', 'Watch ads'], ['/plans', 'Plans'], ['/browse', 'Browse'], ['/profile', 'Profile'], ['/payout', 'Payout'],
-    ['/referral', 'Referrals'], ['/leaderboard', 'Leaderboard'], ['/promotions', 'My Promotions'], ['/support', 'Support'], ['/notifications', 'Notifications']];
+  var PAGES = [['/home', 'Home'], ['/watch', 'Watch ads'], ['/plans', 'Plans'], ['/myplans', 'My Plans'], ['/browse', 'Browse'], ['/profile', 'Profile'], ['/payout', 'Payout'],
+    ['/referral', 'Referrals'], ['/leaderboard', 'Leaderboard'], ['/promotions', 'My Promotions'], ['/apps', 'Premium Apps'], ['/myapps', 'My Apps'], ['/support', 'Support'], ['/notifications', 'Notifications']];
   var FILTERS = [['all', 'All'], ['active', 'Active'], ['scheduled', 'Scheduled'], ['inactive', 'Inactive'], ['expired', 'Expired']];
 
   function retry(box, fn) { box.innerHTML = Z.errorState(); Z.$('[data-retry]', box).addEventListener('click', fn); }

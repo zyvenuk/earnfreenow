@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-build="20261020-1">
+<html lang="en" data-build="20261103-1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="monogram.png">
   <link rel="apple-touch-icon" href="monogram.png">
-  <link rel="stylesheet" href="style.css?v=20261020-1">
+  <link rel="stylesheet" href="style.css?v=20261103-1">
 </head>
 <body data-mode="boot">
 
@@ -61,6 +61,10 @@
     <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-9 18-2.500-8L2 10.500z"/><path d="M21 3 9.500 13"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20.500 11.500a8.500 8.500 0 0 1-12.600 7.400L3.500 20.500l1.300-4.200A8.500 8.500 0 1 1 20.500 11.500z"/><path d="M9 9.500c0 3 2.500 5.500 5.500 5.500l1.200-1.500-2-1-.8.800c-.8-.4-1.600-1.200-2-2l.8-.8-1-2z"/></symbol>
     <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6.500a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3.500"/><path d="m10 9.500 5 2.500-5 2.500z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3.500"/><circle cx="9" cy="10" r="1.600"/><path d="m21 16-5-5L7 20"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.500 4.500 13.500H11L10 21.500l8.500-11H12z"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="m11 3 1.900 5.100L18 10l-5.100 1.900L11 17l-1.900-5.100L4 10l5.100-1.900zM19 15l.8 2.200L22 18l-2.200.8L19 21l-.8-2.200L16 18l2.200-.8z"/></symbol>
     <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M7.500 8a2.500 2.500 0 1 1 0-5C10 3 12 8 12 8s2-5 4.500-5a2.500 2.500 0 1 1 0 5"/></symbol>
     <symbol id="i-lifebuoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.500"/><path d="m5.500 5.500 3.500 3.500M15 15l3.500 3.500M18.500 5.500 15 9M9 15l-3.500 3.500"/></symbol>
   </defs>
@@ -87,8 +91,8 @@
   <nav id="nav" aria-label="Main">
     <a class="nav-item" data-go="/home" data-tab="home"><span class="nav-pill"><svg class="ic"><use href="#i-home"/></svg></span><span>Home</span></a>
     <a class="nav-item" data-go="/watch" data-tab="watch"><span class="nav-pill"><svg class="ic"><use href="#i-play"/></svg></span><span>Watch</span></a>
-    <a class="nav-item" data-go="/plans" data-tab="plans"><span class="nav-pill"><svg class="ic"><use href="#i-layout"/></svg></span><span>Plans</span></a>
     <a class="nav-item" data-go="/browse" data-tab="browse"><span class="nav-pill"><svg class="ic"><use href="#i-search"/></svg></span><span>Browse</span></a>
+    <a class="nav-item" data-go="/plans" data-tab="plans"><span class="nav-pill"><svg class="ic"><use href="#i-layout"/></svg></span><span>Plans</span></a>
     <a class="nav-item" data-go="/profile" data-tab="profile"><span class="nav-pill"><svg class="ic"><use href="#i-user"/></svg></span><span>Profile</span></a>
   </nav>
 </div>
@@ -98,28 +102,30 @@
 <div id="toast-root" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-init.js?v=20261020-1"></script>
-<script src="utils.js?v=20261020-1"></script>
-<script src="adslots.js?v=20261020-1"></script>
-<script src="auth.js?v=20261020-1"></script>
-<script src="ads.js?v=20261020-1"></script>
-<script src="wallet.js?v=20261020-1"></script>
-<script src="payout.js?v=20261020-1"></script>
-<script src="community.js?v=20261020-1"></script>
-<script src="referral.js?v=20261020-1"></script>
-<script src="pwa.js?v=20261020-1"></script>
-<script src="device.js?v=20261020-1"></script>
-<script src="online.js?v=20261020-1"></script>
-<script src="maintenance.js?v=20261020-1"></script>
-<script src="plans.js?v=20261020-1"></script>
-<script src="banners.js?v=20261020-1"></script>
-<script src="leaderboard.js?v=20261020-1"></script>
-<script src="plans-admin.js?v=20261020-1"></script>
-<script src="banners-admin.js?v=20261020-1"></script>
-<script src="promotions.js?v=20261020-1"></script>
-<script src="promotions-admin.js?v=20261020-1"></script>
-<script src="cleanup.js?v=20261020-1"></script>
-<script src="admin.js?v=20261020-1"></script>
-<script src="app.js?v=20261020-1"></script>
+<script src="supabase-init.js?v=20261103-1"></script>
+<script src="utils.js?v=20261103-1"></script>
+<script src="adslots.js?v=20261103-1"></script>
+<script src="auth.js?v=20261103-1"></script>
+<script src="ads.js?v=20261103-1"></script>
+<script src="wallet.js?v=20261103-1"></script>
+<script src="payout.js?v=20261103-1"></script>
+<script src="community.js?v=20261103-1"></script>
+<script src="referral.js?v=20261103-1"></script>
+<script src="pwa.js?v=20261103-1"></script>
+<script src="device.js?v=20261103-1"></script>
+<script src="online.js?v=20261103-1"></script>
+<script src="maintenance.js?v=20261103-1"></script>
+<script src="plans.js?v=20261103-1"></script>
+<script src="banners.js?v=20261103-1"></script>
+<script src="leaderboard.js?v=20261103-1"></script>
+<script src="plans-admin.js?v=20261103-1"></script>
+<script src="banners-admin.js?v=20261103-1"></script>
+<script src="promotions.js?v=20261103-1"></script>
+<script src="apps.js?v=20261103-1"></script>
+<script src="promotions-admin.js?v=20261103-1"></script>
+<script src="apps-admin.js?v=20261103-1"></script>
+<script src="cleanup.js?v=20261103-1"></script>
+<script src="admin.js?v=20261103-1"></script>
+<script src="app.js?v=20261103-1"></script>
 </body>
 </html>

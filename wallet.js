@@ -16,6 +16,7 @@
     referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
     admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' },
     plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' },
+    app_purchase: { label: 'Premium app', icon: 'download', cls: 'neg' },
     promo_payment: { label: 'Promotion payment', icon: 'megaphone', cls: 'neg' },
     promo_refund: { label: 'Promotion refund', icon: 'refresh', cls: 'pos' }
   };
@@ -28,7 +29,7 @@
       '<span class="row-ic ' + m.cls + '">' + Z.icon(m.icon) + '</span>' +
       '<span class="row-main"><span class="row-title">' + m.label + '</span>' +
       '<span class="row-sub">' + Z.fmtDate(t.created_at) + (inRef ? ' \u00b7 Referral Wallet' : (t.note ? ' \u00b7 ' + Z.esc(t.note) : '')) + '</span></span>' +
-      (amt !== 0 ? '<span class="amt ' + (inRef ? 'muted' : (amt > 0 ? 'pos' : 'neg')) + '">' + Z.money(amt, { sign: true }) + '</span>' : '') +
+      (amt !== 0 ? '<span class="amt ' + (inRef ? 'muted' : (amt > 0 ? 'pos' : 'neg')) + '">' + Z.moneyHtml(amt, { sign: true }) + '</span>' : '') +
       '</div>';
   };
 
@@ -45,7 +46,7 @@
 
   /* ---------------- Home ---------------- */
   Z.views.home = async function (el, ctx) {
-    var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings().catch(function () {})]);
+    var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings(false, 30000).catch(function () {})]);
     var s = both[0];
     if (ctx.stale()) return;
     var pst = Z.plans.enabled() ? await Z.plans.status(true).catch(function () { return null; }) : null;   // server-clock plan status
@@ -56,21 +57,23 @@
       html += '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so earning and payouts are paused. Contact support if you think this is a mistake.' + (s.note ? '<br><b>' + Z.esc(s.note) + '</b>' : '') + '</div></div>';
     }
 
-    html += Z.maint.notices(['platform', 'payout']);
+    var pv = Z.payoutVisible();   // the admin can hide the Payout page completely
+    html += Z.maint.notices(pv ? ['platform', 'payout'] : ['platform']);
 
-    html += '<button class="card me-card" data-go="/profile" aria-label="Open your profile">' + Z.avatarHtml(s.full_name) +
+    // One card: who you are on top, what you have below.
+    html += '<div class="balance-card hero">' +
+      '<button class="hero-me" data-go="/profile" aria-label="Open your profile">' + Z.avatarHtml(s.full_name) +
       '<span class="me-text"><span class="me-hi">' + greeting() + '</span><b class="me-name">' + Z.esc(s.full_name || 'Member') + '</b>' +
       '<span class="me-meta">' + Z.verBadge(s.email_verified) + '<span class="me-since">Since ' + Z.fmtDay(s.created_at) + '</span></span></span>' +
-      Z.icon('chevron', 'row-chev') + '</button>';
-
-    html += '<div class="balance-card">' +
+      Z.icon('chevron', 'row-chev') + '</button>' +
+      '<div class="hero-body">' +
       '<span class="bc-label">Main Wallet balance</span>' +
-      '<div class="bc-amount">' + Z.money(s.balance) + '</div>' +
-      '<div class="bc-stats"><div><b>' + Z.money(s.today_earned) + '</b><span>Earned today</span></div>' +
+      '<div class="bc-amount">' + Z.moneyHtml(s.balance) + '</div>' +
+      '<div class="bc-stats"><div><b>' + Z.moneyHtml(s.today_earned) + '</b><span>Earned today</span></div>' +
       '<div><b>' + s.today_views + '</b><span>Ads today</span></div>' +
-      '<button class="bc-ref" data-go="/referral"><b>' + Z.money(s.referral_balance) + '</b><span>Referral, locked</span></button></div>' +
+      '<button class="bc-ref" data-go="/referral"><b>' + Z.moneyHtml(s.referral_balance) + '</b><span>Referral, locked</span></button></div>' +
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
-      '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button></div></div>';
+      (pv ? '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button>' : '') + '</div></div></div>';
 
     html += Z.banners.slot();   // promotional carousel (filled from the database, hidden when there is nothing to show)
 
@@ -80,6 +83,7 @@
 
     html += Z.leaderboard.homeCard();
     html += Z.promos.homeCard();
+    html += Z.apps.homeCard();
     html += Z.plans.homeCard(pst);
     html += Z.followCard();
     html += Z.pwa.cards();
@@ -91,7 +95,7 @@
       '<span class="row-main"><span class="row-title">' + (s.available_ads > 0 ? s.available_ads + (s.available_ads === 1 ? ' ad' : ' ads') + ' ready' : 'No ads available') + '</span>' +
       '<span class="row-sub">' + (s.available_ads > 0 ? 'Watch and earn rewards' : 'Check back soon for new ads') + '</span></span>' +
       Z.icon('chevron', 'row-chev') + '</button>';
-    if (s.open_payouts > 0) {
+    if (pv && s.open_payouts > 0) {
       html += '<button class="row row-btn" data-go="/payout">' +
         '<span class="row-ic warn">' + Z.icon('clock') + '</span>' +
         '<span class="row-main"><span class="row-title">' + s.open_payouts + (s.open_payouts === 1 ? ' payout' : ' payouts') + ' in progress</span>' +
@@ -100,7 +104,7 @@
     }
     html += '</div>';
 
-    html += '<div class="section-head"><h3>Recent activity</h3><button class="link-btn" data-go="/payout">See all</button></div>';
+    html += '<div class="section-head"><h3>Recent activity</h3>' + (pv ? '<button class="link-btn" data-go="/payout">See all</button>' : '') + '</div>';
     if (s.recent && s.recent.length) html += '<div class="card">' + Z.fold(s.recent.map(Z.txRow)) + '</div>';
     else html += '<div class="card">' + Z.empty({ icon: 'receipt', title: 'No activity yet', text: 'Your rewards and payouts will show up here.' }) + '</div>';
 
@@ -155,7 +159,7 @@
 
   /* ---------------- Profile ---------------- */
   Z.views.profile = async function (el, ctx) {
-    var s = await Z.loadSummary();
+    var s = (await Promise.all([Z.loadSummary(), Z.refreshSettings(false, 30000).catch(function () {})]))[0];
     if (ctx.stale()) return;
     var pst = Z.plans.enabled() ? await Z.plans.status().catch(function () { return null; }) : null;
     if (ctx.stale()) return;
@@ -164,12 +168,13 @@
       '<div class="profile-head">' + Z.avatarHtml(s.full_name, 'lg') +
       '<div class="ph-text"><h2 id="pname">' + Z.esc(s.full_name) + '</h2><p>' + Z.esc(s.email) + '</p><div class="ph-badges">' + Z.verBadge(s.email_verified) + Z.badge(s.status) + '</div></div></div>' +
       '<div class="card">' +
-      '<div class="row">' + '<span class="row-ic">' + Z.icon('coin') + '</span><span class="row-main"><span class="row-title">Total earned</span></span><span class="amt">' + Z.money(s.total_earned) + '</span></div>' +
+      '<div class="row">' + '<span class="row-ic">' + Z.icon('coin') + '</span><span class="row-main"><span class="row-title">Total earned</span></span><span class="amt">' + Z.moneyHtml(s.total_earned) + '</span></div>' +
       '<div class="row">' + '<span class="row-ic">' + Z.icon('clock') + '</span><span class="row-main"><span class="row-title">Member since</span></span><span class="amt muted">' + Z.fmtDay(s.created_at) + '</span></div>' +
       '</div>' +
       '<div class="card">' +
-      '<button class="row row-btn" data-go="/payout"><span class="row-ic acc">' + Z.icon('payout') + '</span><span class="row-main"><span class="row-title">Payout</span><span class="row-sub">Withdraw your earnings</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
+      (Z.payoutVisible() ? '<button class="row row-btn" data-go="/payout"><span class="row-ic acc">' + Z.icon('payout') + '</span><span class="row-main"><span class="row-title">Payout</span><span class="row-sub">Withdraw your earnings</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
       Z.plans.profileRow(pst) +
+      (Z.appsVisible() ? '<button class="row row-btn" data-go="/myapps"><span class="row-ic acc">' + Z.icon('download') + '</span><span class="row-main"><span class="row-title">My Apps</span><span class="row-sub">Purchased premium apps</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
       '<button class="row row-btn" id="verify"><span class="row-ic ' + (s.email_verified ? 'pos' : 'warn') + '">' + Z.icon('shield') + '</span>' +
       '<span class="row-main"><span class="row-title">Account verification</span><span class="row-sub">' + (s.email_verified ? 'Your Gmail / email is verified' : 'Not verified. Tap to verify') + '</span></span>' +
       Z.icon('chevron', 'row-chev') + '</button>' +

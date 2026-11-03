@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['promotions', 'Promotions', 'megaphone'], ['promoservices', 'Promo services', 'sliders'], ['banners', 'Banners', 'layout'], ['devices', 'Devices', 'phone'], ['cleanup', 'Cleanup', 'trash'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['promotions', 'Promotions', 'megaphone'], ['promoservices', 'Promo services', 'sliders'], ['banners', 'Banners', 'layout'], ['apps', 'Apps store', 'download'], ['devices', 'Devices', 'phone'], ['cleanup', 'Cleanup', 'trash'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
     ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
@@ -114,6 +114,7 @@
   SECTIONS.promotions = function (body, ctx) { return Z.promoAdmin.list(body, ctx); };
   SECTIONS.promoservices = function (body, ctx) { return Z.promoAdmin.services(body, ctx); };
   SECTIONS.banners = function (body, ctx) { return Z.bannersAdmin.list(body, ctx); };
+  SECTIONS.apps = function (body, ctx) { return Z.appsAdmin.list(body, ctx); };
   SECTIONS.cleanup = function (body, ctx) { return Z.cleanupAdmin.view(body, ctx); };
 
   /* ---------------- Plans, subscriptions, badges (see plans-admin.js) ---------------- */
@@ -886,7 +887,12 @@
     var s = r.data;
     body.innerHTML = '<div class="page-head"><div><h2>Settings</h2><p class="sub">Payout rules shown to users.</p></div></div>' +
       '<form class="card form" id="sf" novalidate>' +
-      Z.field({ id: 'cs', label: 'Currency symbol', value: s.currency_symbol, attrs: 'maxlength="6"' }) +
+      '<div class="field"><label>Currency</label><div class="chips" id="cur-pre"><button type="button" class="chip" data-cur="rs">Rupees (Rs)</button><button type="button" class="chip" data-cur="zv">Zv Coin</button></div>' +
+      '<div class="hint">Only the name and symbol shown to users change. Amounts stay the same, there is no conversion.</div></div>' +
+      Z.field({ id: 'cn', label: 'Currency name', value: s.currency_name, attrs: 'maxlength="24"' }) +
+      Z.field({ id: 'cs', label: 'Currency symbol', value: s.currency_symbol, attrs: 'maxlength="6"', hint: 'Short text before amounts, for example Rs or ZV.' }) +
+      Z.switchEl('ci', s.currency_icon, 'Show icon.png next to amounts') +
+      '<p class="hint" style="margin-top:-6px">Put a small square picture named icon.png next to index.html. If it is missing, the symbol is shown instead.</p>' +
       Z.field({ id: 'mp', label: 'Minimum payout', value: s.min_payout, attrs: 'inputmode="decimal"' }) +
       '<div class="two">' + Z.field({ id: 'fp', label: 'Fee percent', value: s.fee_percent, attrs: 'inputmode="decimal"' }) +
       Z.field({ id: 'ff', label: 'Fixed fee', value: s.fee_fixed, attrs: 'inputmode="decimal"' }) + '</div>' +
@@ -895,6 +901,10 @@
       Z.field({ id: 'og', label: 'Direct link loading allowance (seconds)', value: s.offer_grace_seconds, attrs: 'inputmode="numeric"', hint: 'Smart links take a few seconds to load. This is added to the task\u2019s watch time for Direct link ads (default 5), so users see e.g. 20 s for a 15 s task.' }) +
       Z.field({ id: 'pn', label: 'Payout notice', type: 'textarea', rows: 3, value: s.payout_notice, hint: 'Shown on the Payout screen.' }) +
       Z.switchEl('pe', s.payouts_enabled, 'Payouts enabled') +
+      Z.switchEl('pv', s.payout_page_visible, 'Show the Payout page to users') +
+      Z.switchEl('apv', s.apps_page_visible !== false, 'Show Premium Apps to users') +
+      '<p class="hint" style="margin-top:-6px">Off hides Premium Apps completely: no Home card, menu item or page, and buying and downloading are refused by the database. Time keeps running on apps users already bought.</p>' +
+      '<p class="hint" style="margin-top:-6px">Off hides the Payout page completely: no menu item, button or link, and users cannot request a payout. Existing requests stay in the admin Payouts tab.</p>' +
       '<div id="serr"></div><button class="btn btn-primary btn-block" type="submit">Save settings</button></form>' +
       '<div class="page-head"><div><h2>Support &amp; channels</h2><p class="sub">Links users see in Support and the welcome popup. Leave blank to hide.</p></div></div>' +
       '<form class="card form" id="cf" novalidate>' +
@@ -904,10 +914,24 @@
       Z.field({ id: 'cw', label: 'WhatsApp channel link', type: 'url', value: s.channel_whatsapp, placeholder: 'https://whatsapp.com/channel/...', attrs: 'inputmode="url" autocapitalize="off"' }) +
       Z.field({ id: 'ct', label: 'Telegram channel link', type: 'url', value: s.channel_telegram, placeholder: 'https://t.me/yourchannel', attrs: 'inputmode="url" autocapitalize="off"' }) +
       '<div id="cerr"></div><button class="btn btn-primary btn-block" type="submit">Save links</button></form>';
+    var PRESETS = { rs: ['Rupees', 'Rs', false], zv: ['Zv Coin', 'ZV', true] };
+    function markPreset() {
+      var n = Z.$('#cn', body).value.trim(), c = Z.$('#cs', body).value.trim();
+      Z.$$('[data-cur]', body).forEach(function (b) { var x = PRESETS[b.getAttribute('data-cur')]; b.classList.toggle('on', x[0] === n && x[1] === c); });
+    }
+    Z.$('#cur-pre', body).addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cur]'); if (!b) return;
+      var x = PRESETS[b.getAttribute('data-cur')];
+      Z.$('#cn', body).value = x[0]; Z.$('#cs', body).value = x[1]; Z.$('#ci', body).checked = x[2]; markPreset();
+    });
+    Z.$('#cn', body).addEventListener('input', markPreset); Z.$('#cs', body).addEventListener('input', markPreset);
+    markPreset();
+
     Z.$('#sf', body).addEventListener('submit', function (e) {
       e.preventDefault();
       var p = {
-        currency_symbol: Z.$('#cs', body).value.trim(), min_payout: parseFloat(Z.$('#mp', body).value),
+        currency_name: Z.$('#cn', body).value.trim(), currency_symbol: Z.$('#cs', body).value.trim(), currency_icon: Z.$('#ci', body).checked,
+        payout_page_visible: Z.$('#pv', body).checked, apps_page_visible: Z.$('#apv', body).checked, min_payout: parseFloat(Z.$('#mp', body).value),
         fee_percent: parseFloat(Z.$('#fp', body).value), fee_fixed: parseFloat(Z.$('#ff', body).value),
         payout_notice: Z.$('#pn', body).value.trim(), payouts_enabled: Z.$('#pe', body).checked,
         offer_grace_seconds: parseInt(Z.$('#og', body).value, 10),
@@ -917,6 +941,7 @@
       if (!isFinite(p.offer_grace_seconds) || p.offer_grace_seconds < 0 || p.offer_grace_seconds > 30) return Z.formError(Z.$('#serr', body), 'Loading allowance must be 0 to 30 seconds.');
       var err = Z.$('#serr', body);
       if (!p.currency_symbol) return Z.formError(err, 'Enter a currency symbol.');
+      if (!p.currency_name) return Z.formError(err, 'Enter a currency name.');
       if (!isFinite(p.min_payout) || p.min_payout <= 0) return Z.formError(err, 'Minimum payout must be above zero.');
       if (!isFinite(p.fee_percent) || p.fee_percent < 0 || p.fee_percent >= 50) return Z.formError(err, 'Fee percent must be from 0 to under 50.');
       if (!isFinite(p.fee_fixed) || p.fee_fixed < 0) return Z.formError(err, 'Fixed fee cannot be negative.');

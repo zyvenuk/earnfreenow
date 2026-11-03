@@ -19,8 +19,8 @@
   };
 
   // Settings can change while the app is open; re-read them occasionally (cached 5 min).
-  Z.refreshSettings = async function (force) {
-    if (!force && Z.state.settingsAt && Date.now() - Z.state.settingsAt < 5 * 60 * 1000) return Z.state.settings;
+  Z.refreshSettings = async function (force, maxAge) {
+    if (!force && Z.state.settingsAt && Date.now() - Z.state.settingsAt < (maxAge || 5 * 60 * 1000)) return Z.state.settings;
     var r = await sb.from('platform_settings').select('*').eq('id', true).single();
     if (!r.error && r.data) { Z.state.settings = r.data; Z.state.settingsAt = Date.now(); }
     return Z.state.settings;

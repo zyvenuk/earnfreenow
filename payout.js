@@ -58,9 +58,9 @@
     var canRequest = st.payouts_enabled && s.status === 'active' && !pBlocked;
 
     el.innerHTML = '<section class="page">' +
-      '<div class="card info-card"><div class="ic-line"><span>Available balance</span><b id="avail">' + Z.money(s.balance) + '</b></div>' +
-      '<div class="ic-line small"><span>Total earned</span><b>' + Z.money(s.total_earned) + '</b></div>' +
-      '<div class="ic-line small"><span>Paid out</span><b>' + Z.money(s.total_paid_out) + '</b></div>' +
+      '<div class="card info-card"><div class="ic-line"><span>Available balance</span><b id="avail">' + Z.moneyHtml(s.balance) + '</b></div>' +
+      '<div class="ic-line small"><span>Total earned</span><b>' + Z.moneyHtml(s.total_earned) + '</b></div>' +
+      '<div class="ic-line small"><span>Paid out</span><b>' + Z.moneyHtml(s.total_paid_out) + '</b></div>' +
       '<div class="ic-line small"><span>Minimum payout</span><b>' + Z.money(min) + '</b></div>' +
       ((Number(st.fee_percent) > 0 || Number(st.fee_fixed) > 0) ? '<div class="ic-line small"><span>Fee</span><b>' +
         [Number(st.fee_percent) > 0 ? Number(st.fee_percent) + '%' : '', Number(st.fee_fixed) > 0 ? Z.money(st.fee_fixed) : ''].filter(Boolean).join(' + ') + '</b></div>' : '') +
@@ -151,7 +151,7 @@
         amtEl.value = '';
         Z.invalidateSummary();
         s = await Z.loadSummary(true);
-        Z.$('#avail', el).textContent = Z.money(s.balance);
+        Z.$('#avail', el).innerHTML = Z.moneyHtml(s.balance);
         refresh();
         loadHist(true);
       }, Z.$('#perr', el));
@@ -194,7 +194,7 @@
           Z.toast('Request cancelled. Balance returned.', 'ok');
           Z.invalidateSummary();
           s = await Z.loadSummary(true);
-          Z.$('#avail', el).textContent = Z.money(s.balance);
+          Z.$('#avail', el).innerHTML = Z.moneyHtml(s.balance);
           refresh(); loadHist(true);
         });
       }
@@ -204,7 +204,7 @@
     /* ---- Transactions (wallet history), folded to 2 rows; server paging after expanding ---- */
     var TXF = {
       all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
-      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'], other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund']
+      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'], other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund', 'app_purchase']
     };
     var txF = 'all', txItems = [], txDone = false, txLoading = false, txExpanded = false;
     var txBox = Z.$('#tx', el), txMore = Z.$('#txmore', el);

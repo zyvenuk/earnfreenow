@@ -26,6 +26,21 @@
     var sign = v < 0 ? '\u2212' : (opt && opt.sign && v > 0 ? '+' : '');
     return sign + sym + '\u00a0' + nf.format(Math.abs(v));
   };
+  // Same as Z.money but for HTML: when the admin turned the currency icon on, the small icon.png sits in front of the number.
+  // (The file is optional: if it is missing, the short symbol is shown instead.)
+  Z.moneyHtml = function (n, opt) {
+    var st = Z.state.settings || {}, v = Number(n) || 0;
+    var sign = v < 0 ? '\u2212' : (opt && opt.sign && v > 0 ? '+' : '');
+    var sym = st.currency_symbol || 'Rs', num = nf.format(Math.abs(v));
+    var lead = st.currency_icon
+      ? '<img class="cur-ic" src="icon.png" alt="' + Z.esc(sym) + '" decoding="async" onerror="this.replaceWith(document.createTextNode(this.alt+\'\\u00a0\'))">'
+      : Z.esc(sym) + '\u00a0';
+    return '<span class="mny">' + sign + lead + num + '</span>';
+  };
+  Z.currencyName = function () { return (Z.state.settings && Z.state.settings.currency_name) || 'Rupees'; };
+  // The admin can hide the whole Payout page. Hidden means no screen, no link, no button (and the database refuses new requests).
+  Z.appsVisible = function () { return !(Z.state.settings && Z.state.settings.apps_page_visible === false); };
+  Z.payoutVisible = function () { return !(Z.state.settings && Z.state.settings.payout_page_visible === false); };
   Z.fmtDate = function (d) {
     if (!d) return '\u2014';
     return new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
@@ -78,6 +93,12 @@
     plan_daily_limit: 'You have used all of today\u2019s ads for your plan. New ads arrive tomorrow.',
     plan_expired: 'Your plan has expired or is no longer active, so this ad cannot earn a reward.',
     plan_unavailable: 'This plan is not available right now.',
+    app_unavailable: 'This app is not available right now.',
+    apps_hidden: 'Premium Apps is not available right now.',
+    price_changed: 'The price of this app has changed. Please review it and try again.',
+    already_owned: 'You already have access to this app.',
+    no_access: 'Your access to this app has ended or is not available.',
+    app_has_active_access: 'Some users still have active access to this app. Switch it off instead, or wait until their access ends.',
     plan_sold_out: 'This plan has reached its maximum number of activations.',
     plan_already_active: 'This plan is already active on your account.',
     plan_other_active: 'You already have an active plan. You can activate another one when it ends.',
@@ -329,7 +350,8 @@
   Z.invalidateSummary = function () { Z.state.summaryAt = 0; if (Z.plans) Z.plans.invalidate(); };
   Z.updateBalanceChip = function () {
     var chip = Z.$('#bar-balance'), s = Z.state.summary;
-    if (s) chip.textContent = Z.money(s.balance);
+    if (s) chip.innerHTML = Z.moneyHtml(s.balance);
+    if (Z.payoutVisible()) chip.setAttribute('data-go', '/payout'); else chip.removeAttribute('data-go');
   };
 
   // Delegated handlers shared across the app
