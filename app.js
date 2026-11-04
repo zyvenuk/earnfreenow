@@ -14,6 +14,7 @@
     payout: { title: 'Payout', back: '/profile', tab: 'profile' },
     apps: { title: 'Premium Apps', back: '/home', tab: 'home' },
     myapps: { title: 'My Apps', back: '/apps', tab: 'home' },
+    community: { title: 'Community chat', back: '/home', tab: 'home' },
     myplans: { title: 'My Plans', back: '/plans', tab: 'plans' },
     leaderboard: { title: 'Leaderboard', back: '/home', tab: 'home' },
     promotions: { title: 'Promotions', back: '/home', tab: 'home' }

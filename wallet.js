@@ -84,6 +84,7 @@
     html += Z.leaderboard.homeCard();
     html += Z.promos.homeCard();
     html += Z.apps.homeCard();
+    html += Z.chat.homeCard();
     html += Z.plans.homeCard(pst);
     html += Z.followCard();
     html += Z.pwa.cards();
