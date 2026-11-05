@@ -44,6 +44,28 @@
     function life() { return (cfg ? cfg.lifetime_minutes : 60) * 60000; }
     function live1(m) { return m.at + life() > now(); }
 
+    /* ---------- links in messages: turn URLs into tappable green links ---------- */
+    var LINK_RE = /(^|[^\w@\/.\-])((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9\-]+\.)*(?:whatsapp\.com|wa\.me|t\.me|telegram\.me|youtube\.com|youtu\.be|instagram\.com|facebook\.com|fb\.com|fb\.me|tiktok\.com|x\.com|twitter\.com)\/[^\s<>"']*)/gi;
+    function linkify(text) {
+      text = String(text == null ? '' : text);
+      var out = '', last = 0, m;
+      LINK_RE.lastIndex = 0;
+      while ((m = LINK_RE.exec(text))) {
+        var lead = m[1], raw = m[2], tail = '';
+        // trailing punctuation belongs to the sentence, not the link
+        var t = raw.match(/[.,!?;:'")\]}]+$/);
+        if (t) { tail = t[0]; raw = raw.slice(0, raw.length - tail.length); }
+        if (!raw) continue;
+        var href = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+        var start = m.index + lead.length;
+        out += Z.esc(text.slice(last, start)) +
+          '<a class="cm-link" href="' + Z.esc(href) + '" target="_blank" rel="noopener noreferrer nofollow ugc">' + Z.esc(raw) + '</a>';
+        last = start + raw.length;
+        LINK_RE.lastIndex = last;
+      }
+      return out + Z.esc(text.slice(last));
+    }
+
     /* ---------- messages ---------- */
     function bubble(m, prev) {
       var same = prev && prev.name === m.name && prev.mine === m.mine && m.at - prev.at < 120000;
@@ -51,7 +73,7 @@
       return '<div class="cm' + (m.mine ? ' mine' : '') + (same ? ' cont' : '') + '" data-id="' + Z.esc(m.id) + '"' + admin + '>' +
         (m.mine ? '' : '<span class="cm-av">' + (same ? '' : Z.avatarHtml(m.name)) + '</span>') +
         '<div class="cm-b">' + (same || m.mine ? '' : '<div class="cm-n">' + Z.esc(m.name) + '</div>') +
-        '<div class="cm-t">' + Z.esc(m.body) + '</div><div class="cm-m">' + Z.esc(clock(m.at)) + '</div></div></div>';
+        '<div class="cm-t">' + linkify(m.body) + '</div><div class="cm-m">' + Z.esc(clock(m.at)) + '</div></div></div>';
     }
     function paint(stick) {
       msgs = msgs.filter(live1);
@@ -157,6 +179,7 @@
 
     /* ---------- admin: moderate a message from the chat itself ---------- */
     list.addEventListener('click', function (e) {
+      if (e.target.closest('a.cm-link')) return;   // tapping a link opens it, not the moderation sheet
       var row = e.target.closest('[data-mod]'); if (!row) return;
       var id = row.getAttribute('data-mod'), m = seen[id]; if (!m) return;
       var sh = Z.sheet('<h2 class="sheet-title">Moderate message</h2><p class="sheet-text"><b>' + Z.esc(m.name) + '</b><br>' + Z.esc(m.body) + '</p>' +
