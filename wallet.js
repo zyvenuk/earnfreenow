@@ -75,6 +75,7 @@
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
       (pv ? '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button>' : '') + '</div></div></div>';
 
+    html += Z.followCard();     // official channels: right under the balance card
     html += Z.banners.slot();   // promotional carousel (filled from the database, hidden when there is nothing to show)
 
     html += '<div class="quick-grid">' +
@@ -86,7 +87,6 @@
     html += Z.apps.homeCard();
     html += Z.chat.homeCard();
     html += Z.plans.homeCard(pst);
-    html += Z.followCard();
     html += Z.pwa.cards();
 
     html += Z.slots.html('home_top');
@@ -105,16 +105,71 @@
     }
     html += '</div>';
 
-    html += '<div class="section-head"><h3>Recent activity</h3>' + (pv ? '<button class="link-btn" data-go="/payout">See all</button>' : '') + '</div>';
-    if (s.recent && s.recent.length) html += '<div class="card">' + Z.fold(s.recent.map(Z.txRow)) + '</div>';
-    else html += '<div class="card">' + Z.empty({ icon: 'receipt', title: 'No activity yet', text: 'Your rewards and payouts will show up here.' }) + '</div>';
-
     html += Z.slots.html('home_bottom') + '</section>';
     el.innerHTML = html;
     if (pst) Z.plans.tickLeft(el);
     Z.pwa.bindCards(el);
     Z.banners.mount(Z.$('#bn', el), ctx);
     Z.slots.attach(el, ctx);
+  };
+
+  /* ---------------- Transaction & Recent Activity (opened from Profile) ---------------- */
+  Z.views.activity = async function (el, ctx) {
+    var PAGE = 20;
+    var TXF = {
+      all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
+      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'],
+      other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund', 'app_purchase']
+    };
+    var f = 'all', items = [], done = false, loading = false;
+
+    el.innerHTML = '<section class="page">' +
+      '<div class="section-head"><h3>All transactions</h3><button class="link-btn" id="txclear">Clear history</button></div>' +
+      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-tf') +
+      '<div class="card" id="tx"></div><div id="txmore"></div></section>';
+
+    var box = Z.$('#tx', el), more = Z.$('#txmore', el);
+    function renderMore() {
+      more.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="txmb">Load more</button>';
+      var b = Z.$('#txmb', more);
+      if (b) b.addEventListener('click', function () { Z.busy(b, true); load(false); });
+    }
+    async function load(reset) {
+      if (loading) return; loading = true;
+      if (reset) { items = []; done = false; box.innerHTML = Z.skel(3, 56); more.innerHTML = ''; }
+      var q = sb.from('transactions').select('id,type,amount,balance_after,wallet,note,created_at')
+        .order('created_at', { ascending: false }).range(items.length, items.length + PAGE - 1);
+      if (TXF[f]) q = q.in('type', TXF[f]);
+      var r = await q;
+      loading = false;
+      if (ctx.stale()) return;
+      if (r.error) { box.innerHTML = Z.errorState(); Z.$('[data-retry]', box).addEventListener('click', function () { load(true); }); more.innerHTML = ''; return; }
+      items = items.concat(r.data || []);
+      done = (r.data || []).length < PAGE;
+      box.innerHTML = items.length ? items.map(Z.txRow).join('') : Z.empty({ icon: 'receipt', title: 'No activity yet', text: 'Your rewards, payouts and balance changes will show up here.' });
+      renderMore();
+    }
+    Z.$('[data-tf]', el).parentNode.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-tf]');
+      if (!c || c.getAttribute('data-tf') === f) return;
+      f = c.getAttribute('data-tf');
+      Z.$$('[data-tf]', el).forEach(function (x) { x.classList.toggle('on', x === c); });
+      load(true);
+    });
+    // Clearing only hides the list for you. Your balance and earnings are not affected.
+    Z.$('#txclear', el).addEventListener('click', async function () {
+      if (!items.length) return Z.toast('There is nothing to clear.');
+      if (!await Z.confirm({ title: 'Clear transaction history?', text: 'Your transaction list will be emptied. Your balance and earnings are not changed.', confirm: 'Clear history', danger: true })) return;
+      var b = this;
+      Z.run(b, async function () {
+        var r = await sb.rpc('clear_my_transactions');
+        if (r.error) throw r.error;
+        Z.invalidateSummary();
+        Z.toast('History cleared', 'ok');
+        load(true);
+      });
+    });
+    load(true);
   };
 
   /* ---------------- Account verification ---------------- */
@@ -162,9 +217,6 @@
   Z.views.profile = async function (el, ctx) {
     var s = (await Promise.all([Z.loadSummary(), Z.refreshSettings(false, 30000).catch(function () {})]))[0];
     if (ctx.stale()) return;
-    var pst = Z.plans.enabled() ? await Z.plans.status().catch(function () { return null; }) : null;
-    if (ctx.stale()) return;
-
     el.innerHTML = '<section class="page">' +
       '<div class="profile-head">' + Z.avatarHtml(s.full_name, 'lg') +
       '<div class="ph-text"><h2 id="pname">' + Z.esc(s.full_name) + '</h2><p>' + Z.esc(s.email) + '</p><div class="ph-badges">' + Z.verBadge(s.email_verified) + Z.badge(s.status) + '</div></div></div>' +
@@ -174,7 +226,7 @@
       '</div>' +
       '<div class="card">' +
       (Z.payoutVisible() ? '<button class="row row-btn" data-go="/payout"><span class="row-ic acc">' + Z.icon('payout') + '</span><span class="row-main"><span class="row-title">Payout</span><span class="row-sub">Withdraw your earnings</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
-      Z.plans.profileRow(pst) +
+      '<button class="row row-btn" data-go="/activity"><span class="row-ic acc">' + Z.icon('receipt') + '</span><span class="row-main"><span class="row-title">Transaction &amp; Recent Activity</span><span class="row-sub">All your rewards, payouts and balance changes</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' +
       (Z.appsVisible() ? '<button class="row row-btn" data-go="/myapps"><span class="row-ic acc">' + Z.icon('download') + '</span><span class="row-main"><span class="row-title">My Apps</span><span class="row-sub">Purchased premium apps</span></span>' + Z.icon('chevron', 'row-chev') + '</button>' : '') +
       '<button class="row row-btn" id="verify"><span class="row-ic ' + (s.email_verified ? 'pos' : 'warn') + '">' + Z.icon('shield') + '</span>' +
       '<span class="row-main"><span class="row-title">Account verification</span><span class="row-sub">' + (s.email_verified ? 'Your Gmail / email is verified' : 'Not verified. Tap to verify') + '</span></span>' +
@@ -193,7 +245,6 @@
     Z.slots.attach(el, ctx);
 
     Z.pwa.bindProfile(el);
-    if (pst) Z.plans.tickLeft(el);
     Z.$('#verify', el).addEventListener('click', function () { verifySheet(this); });
     Z.$('#logout', el).addEventListener('click', async function () {
       if (await Z.confirm({ title: 'Log out?', text: 'You can log back in any time.', confirm: 'Log out' })) Z.signOut();

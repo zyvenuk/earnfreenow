@@ -14,10 +14,11 @@
 
   C.view = async function (body, ctx) {
     var res = await Promise.all([sb.rpc('admin_storage_stats'),
-      sb.from('platform_settings').select('retain_tx_days,retain_views_days,retain_mail_days').eq('id', true).single()]);
+      sb.from('platform_settings').select('retain_tx_days,retain_views_days,retain_mail_days,inactive_unverified_days,inactive_verified_days,inactive_keep_money').eq('id', true).single(),
+      sb.from('inactive_purge_log').select('*').order('ran_at', { ascending: false }).limit(5)]);
     if (ctx.stale()) return;
     if (res[0].error || res[1].error) { body.innerHTML = Z.errorState(); Z.$('[data-retry]', body).addEventListener('click', function () { Z.route(); }); return; }
-    var d = res[0].data, st = res[1].data;
+    var d = res[0].data, st = res[1].data, runs = (res[2] && res[2].data) || [];
 
     body.innerHTML = '<div class="page-head"><div><h2>Cleanup</h2><p class="sub">Keeps the database small so the free plan is enough.</p></div></div>' +
       '<div class="card info-card"><div class="ic-line"><span>Database</span><b>' + mb(d.db_bytes) + '</b></div>' + bar(d.db_bytes, DB_LIMIT) +
@@ -30,10 +31,26 @@
 
       '<form class="card form" id="rf3" novalidate><h3 class="mini-title" style="margin:0">How long to keep data</h3>' +
       '<p class="hint" style="margin-top:-6px">Older data is deleted every night. Balances, payouts, plans and referrals are never touched.</p>' +
-      Z.field({ id: 'rt', label: 'Transactions (days)', value: st.retain_tx_days, attrs: 'inputmode="numeric"', hint: 'A user can also clear their own list at any time.' }) +
+      Z.field({ id: 'rt', label: 'Transactions (days)', value: st.retain_tx_days, attrs: 'inputmode="numeric"', hint: 'A user can also hide their own list; hidden rows are deleted after the same number of days.' }) +
       Z.field({ id: 'rv', label: 'Finished ad views (days)', value: st.retain_views_days, attrs: 'inputmode="numeric"', hint: 'Voided and abandoned ad sessions are removed after 1 day.' }) +
       Z.field({ id: 'rm', label: 'Personal mails (days)', value: st.retain_mail_days, attrs: 'inputmode="numeric"', hint: 'Mails a user deletes are removed at once. Expired alerts go 7 days after they end; switched-off alerts after 30 days.' }) +
       '<div id="rerr3"></div><button class="btn btn-primary btn-block" type="submit">Save</button></form>' +
+
+      '<form class="card form" id="rf4" novalidate><h3 class="mini-title" style="margin:0">Delete inactive accounts</h3>' +
+      '<p class="hint" style="margin-top:-6px">An account that has not been used (no login, no ads watched) for this many days is deleted with ALL its data: wallet, transactions, referrals, devices, chat. It cannot be undone. Runs every night at 3:00 AM Pakistan time. 0 = off.</p>' +
+      Z.field({ id: 'iu', label: 'Unverified accounts (days)', value: st.inactive_unverified_days, attrs: 'inputmode="numeric"', hint: '0 = never delete, otherwise 7 to 3650.' }) +
+      Z.field({ id: 'iv', label: 'Verified accounts (days)', value: st.inactive_verified_days, attrs: 'inputmode="numeric"', hint: '0 = never delete, otherwise 7 to 3650.' }) +
+      Z.field({ id: 'ik', label: 'Accounts that still have money', type: 'select', value: st.inactive_keep_money ? '1' : '0', options: [['1', 'Keep them (balance or referral balance above 0)'], ['0', 'Delete them too']] }) +
+      '<p class="hint">Never deleted, whatever you set: your admin account, accounts with a pending or processing payout, an active paid plan, or a running promotion.</p>' +
+      '<div id="rerr4"></div><button class="btn btn-primary btn-block" type="submit">Save</button>' +
+      '<button class="btn btn-tonal btn-block" type="button" id="runi2">Preview and delete now</button>' +
+      '<p class="hint">"Preview and delete now" uses the numbers typed above, so you can clear the accounts that already exist. You see the list first and nothing is deleted until you confirm.</p>' +
+      (runs.length ? '<h3 class="mini-title" style="margin:6px 0 0">Recent runs</h3>' + runs.map(function (l) {
+        var n = (l.unverified_deleted || 0) + (l.verified_deleted || 0);
+        return '<div class="row"><span class="row-main"><span class="row-title">' + (l.source === 'auto' ? 'Automatic' : 'Manual') + ' \u00b7 ' + n + (n === 1 ? ' account' : ' accounts') + ' deleted</span>' +
+          '<span class="row-sub">' + Z.fmtDate(l.ran_at) + ' \u00b7 ' + (l.unverified_deleted || 0) + ' unverified, ' + (l.verified_deleted || 0) + ' verified' + (l.skipped ? ' \u00b7 ' + l.skipped + ' protected' : '') + '</span></span></div>';
+      }).join('') : '') +
+      '</form>' +
 
       '<div class="card form"><h3 class="mini-title" style="margin:0">Clean now</h3>' +
       '<button class="btn btn-tonal btn-block" id="runc">Run database cleanup now</button>' +
@@ -49,6 +66,48 @@
         if (r.error) throw r.error;
         Z.formError(err, ''); Z.toast('Saved', 'ok');
       }, err);
+    });
+
+    /* ---- inactive accounts: save the rule, or preview + delete right now ---- */
+    function readInactive(err) {
+      var p = { unv: parseInt(Z.$('#iu', body).value, 10), ver: parseInt(Z.$('#iv', body).value, 10), keep: Z.$('#ik', body).value === '1' };
+      var bad = [p.unv, p.ver].some(function (n) { return !isFinite(n) || n < 0 || (n !== 0 && (n < 7 || n > 3650)); });
+      if (bad) { Z.formError(err, 'Each value must be 0 (off) or a whole number of days from 7 to 3650.'); return null; }
+      Z.formError(err, ''); return p;
+    }
+    Z.$('#rf4', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#rerr4', body), p = readInactive(err); if (!p) return;
+      Z.run(Z.$('#rf4 button[type=submit]', body), async function () {
+        var r = await sb.from('platform_settings').update({ inactive_unverified_days: p.unv, inactive_verified_days: p.ver, inactive_keep_money: p.keep }).eq('id', true);
+        if (r.error) throw r.error;
+        Z.toast(p.unv || p.ver ? 'Saved. Inactive accounts are cleared every night.' : 'Saved. Automatic deletion is off.', 'ok');
+      }, err);
+    });
+    Z.$('#runi2', body).addEventListener('click', function () {
+      var b = this, err = Z.$('#rerr4', body), p = readInactive(err); if (!p) return;
+      if (!p.unv && !p.ver) return Z.formError(err, 'Set the days for unverified and/or verified accounts first.');
+      Z.run(b, async function () {
+        var pv = await sb.rpc('admin_inactive_preview', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_money: p.keep });
+        if (pv.error) throw pv.error;
+        var x = pv.data, total = x.unverified + x.verified;
+        if (!total) { Z.toast('No accounts match right now' + (x.skipped ? ' (' + x.skipped + ' inactive but protected)' : ''), 'ok'); return; }
+        var list = (x.sample || []).slice(0, 10).map(function (u) {
+          return '<div class="kv"><span>' + Z.esc(u.email) + '</span><b>' + (u.verified ? 'Verified' : 'Unverified') + ' \u00b7 ' + Z.fmtDay(u.last_active) + '</b></div>';
+        }).join('');
+        var ok = await Z.confirm({
+          title: 'Delete ' + total + (total === 1 ? ' account' : ' accounts') + '?',
+          html: '<div class="summary"><div class="kv"><span>Unverified</span><b>' + x.unverified + '</b></div><div class="kv"><span>Verified</span><b>' + x.verified + '</b></div>' +
+            '<div class="kv"><span>Protected (kept)</span><b>' + x.skipped + '</b></div>' + list +
+            (total > 10 ? '<div class="kv"><span>and ' + (total - 10) + ' more</span><b></b></div>' : '') + '</div>' +
+            '<p class="muted small">These accounts and all their data are deleted permanently. This cannot be undone.</p>',
+          confirm: 'Delete ' + total, cancel: 'Keep them', danger: true
+        });
+        if (!ok) return;
+        var r = await sb.rpc('admin_purge_inactive', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_money: p.keep });
+        if (r.error) throw r.error;
+        Z.toast(r.data.deleted + ' accounts deleted', 'ok'); Z.route();
+      });
     });
 
     Z.$('#runc', body).addEventListener('click', function () {

@@ -12,6 +12,7 @@
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
     payout: { title: 'Payout', back: '/profile', tab: 'profile' },
+    activity: { title: 'Transaction & Recent Activity', back: '/profile', tab: 'profile' },
     apps: { title: 'Premium Apps', back: '/home', tab: 'home' },
     myapps: { title: 'My Apps', back: '/apps', tab: 'home' },
     community: { title: 'Community chat', back: '/home', tab: 'home' },
@@ -36,7 +37,9 @@
     var isTab = !!TITLES[name], sub = SUBS[name];
     setMode(mode);
     Z.backTarget = mode === 'admin' ? '/profile' : (sub ? sub.back : '');
-    Z.$('#bar-title').textContent = mode === 'admin' ? 'Admin' : (sub ? sub.title : (TITLES[name] || 'Zyven'));
+    var ttl = mode === 'admin' ? 'Admin' : (sub ? sub.title : (TITLES[name] || 'Zyven'));
+    Z.$('#bar-title').textContent = ttl;
+    Z.$('#bar-title').toggleAttribute('data-long', ttl.length > 20);   // long titles get a slightly smaller font so they fit
     Z.$('#bar-back').hidden = !Z.backTarget;
     Z.$('#bar-logo').hidden = !!Z.backTarget;
     Z.$('#bar-bell').hidden = mode !== 'app' || name === 'notifications';

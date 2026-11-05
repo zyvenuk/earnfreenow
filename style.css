@@ -70,6 +70,7 @@ body[data-mode="boot"] #shell { visibility: hidden; }
 #shell { min-height: 100vh; min-height: 100dvh; padding-left: var(--rail); }
 #appbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; height: calc(var(--bar-h) + var(--safe-t)); padding: var(--safe-t) 14px 0 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .bar-logo { width: 30px; height: 30px; object-fit: contain; border-radius: 8px; }
+#bar-title[data-long] { font-size: 16px; }
 #bar-title { font-size: 19px; font-weight: 650; letter-spacing: -.01em; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip-balance { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 14px; padding: 7px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .icon-btn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; display: inline-flex; align-items: center; justify-content: center; color: var(--text); flex: none; }
