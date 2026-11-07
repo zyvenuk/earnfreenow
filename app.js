@@ -11,6 +11,7 @@
     support: { title: 'Support', back: '/profile', tab: 'profile' },
     notifications: { title: 'Notifications', back: '/home', tab: '' },
     referral: { title: 'Referrals', back: '/profile', tab: 'profile' },
+    milestones: { title: 'Referral Milestones', back: '/referral', tab: 'profile' },
     payout: { title: 'Payout', back: '/profile', tab: 'profile' },
     activity: { title: 'Transaction & Recent Activity', back: '/profile', tab: 'profile' },
     apps: { title: 'Premium Apps', back: '/home', tab: 'home' },

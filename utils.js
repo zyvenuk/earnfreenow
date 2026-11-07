@@ -123,6 +123,8 @@
     'anual linking is disabled': 'Linking Google is not switched on yet. Please contact support.',
     'already linked': 'That Google account is already linked to another Zyven account.',
     maintenance_platform: 'Zyven is under maintenance right now. Please try again later.',
+    invalid_milestones: 'Milestones need 1 to 10 different targets (1 to 100000) and a reward of 0 or more.',
+    referral_requirement: 'You need more valid referrals before you can withdraw. Check the requirement shown on this page.',
     maintenance_payout: 'Payouts are paused for maintenance right now. Please try again later.',
     ad_not_loaded: 'The ad was not shown. Turn off your ad blocker or Private DNS, then try again.',
     offer_not_done: 'Open the offer and stay on it for the full time first.',

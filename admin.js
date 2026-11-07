@@ -754,20 +754,22 @@
 
   /* ---------------- Referrals ---------------- */
   SECTIONS.referrals = async function (body, ctx) {
-    var res = await Promise.all([sb.rpc('admin_referral_stats'), sb.from('platform_settings').select('*').eq('id', true).single()]);
+    var res = await Promise.all([sb.rpc('admin_referral_stats'), sb.from('platform_settings').select('*').eq('id', true).single(),
+      sb.from('referral_milestones').select('level,target,reward').order('level').order('target')]);
     if (ctx.stale()) return;
-    if (res[0].error || res[1].error) return retry(body, function () { Z.route(); });
-    var d = res[0].data, s = res[1].data;
+    if (res[0].error || res[1].error || res[2].error) return retry(body, function () { Z.route(); });
+    var d = res[0].data, s = res[1].data, msRows = res[2].data || [];
     function stat(label, value, sub) { return '<div class="stat"><span>' + label + '</span><b>' + value + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>'; }
 
     body.innerHTML = '<div class="page-head"><div><h2>Referrals</h2><p class="sub">2-level program overview and rewards.</p></div></div>' +
       '<div class="stat-grid">' +
       stat('Total referrals', d.total, '') + stat('Level 1 / Level 2', d.l1 + ' / ' + d.l2, 'Direct / Indirect') +
-      stat('Valid', d.valid, '') + stat('Invalid', d.invalid, 'Missing 3 ads or verified email') +
+      stat('Valid', d.valid, '') + stat('Invalid', d.invalid, 'Requirements not met yet') +
       stat('Referral bonuses', Z.money(Number(d.bonus_locked) + Number(d.bonus_transferred)), d.bonus_count + ' issued') +
       stat('Bonuses locked', Z.money(d.bonus_locked), 'Waiting in Referral Wallets') +
       stat('Bonuses unlocked', Z.money(d.bonus_transferred), 'Moved to Main Wallets') +
-      stat('Commissions paid', Z.money(d.commission_total), d.commission_count + ' payments') + '</div>' +
+      stat('Commissions paid', Z.money(d.commission_total), d.commission_count + ' payments') +
+      stat('Milestone rewards', Z.money(d.milestone_total), d.milestone_count + ' paid') + '</div>' +
 
       '<div class="page-head"><div><h2>Rewards</h2><p class="sub">Changes apply to future bonuses and commissions only. Past records keep the amount, rate and unlock date they were created with.</p></div></div>' +
       '<form class="card form" id="rf" novalidate>' +
@@ -779,6 +781,36 @@
       Z.field({ id: 'c2', label: 'Commission %', value: s.ref_l2_commission, attrs: 'inputmode="decimal"' }) + '</div>' +
       Z.field({ id: 'ud', label: 'Bonus unlock delay (days)', value: s.ref_unlock_days, attrs: 'inputmode="numeric"', hint: 'Bonuses move from the Referral Wallet to the Main Wallet after this many days. Default 3.' }) +
       '<div id="rferr"></div><button class="btn btn-primary btn-block" type="submit">Save referral settings</button></form>' +
+
+      '<div class="page-head"><div><h2>Valid referral requirements</h2><p class="sub">A referral becomes valid only when the referred person meets every rule below. Set a number to 0, or choose No, to skip a rule. Referrals that are already valid stay valid.</p></div></div>' +
+      '<form class="card form" id="rq" novalidate>' +
+      Z.field({ id: 'q-ads', label: 'Ads completed', value: s.ref_req_ads, attrs: 'inputmode="numeric"', hint: 'Finished ad views (0 = not required).' }) +
+      Z.field({ id: 'q-dad', label: 'Different ads watched', value: s.ref_req_distinct_ads, attrs: 'inputmode="numeric"', hint: 'Number of distinct ads, so one ad repeated does not count twice.' }) +
+      Z.field({ id: 'q-age', label: 'Account age (days)', value: s.ref_req_age_days, attrs: 'inputmode="numeric"', hint: 'Days since the referred person signed up.' }) +
+      Z.field({ id: 'q-act', label: 'Active days', value: s.ref_req_active_days, attrs: 'inputmode="numeric"', hint: 'Different days on which they watched at least one ad.' }) +
+      Z.field({ id: 'q-earn', label: 'Total earned', value: s.ref_req_earned, attrs: 'inputmode="decimal"', hint: 'Lifetime earnings of the referred person (0 = not required).' }) +
+      Z.field({ id: 'q-mail', label: 'Verified email', type: 'select', value: s.ref_req_email ? '1' : '0', options: [['1', 'Required'], ['0', 'Not required']] }) +
+      Z.field({ id: 'q-plan', label: 'Any plan activated', type: 'select', value: s.ref_req_plan ? '1' : '0', options: [['0', 'Not required'], ['1', 'Required (free or paid)']] }) +
+      Z.field({ id: 'q-paid', label: 'Paid plan bought', type: 'select', value: s.ref_req_paid_plan ? '1' : '0', options: [['0', 'Not required'], ['1', 'Required']] }) +
+      Z.field({ id: 'q-dev', label: 'Registered phone', type: 'select', value: s.ref_req_device ? '1' : '0', options: [['0', 'Not required'], ['1', 'Required']] }) +
+      '<div id="rqerr"></div><button class="btn btn-primary btn-block" type="submit">Save requirements</button>' +
+      '<button class="btn btn-tonal btn-block" type="button" id="rqre">Re-check invalid referrals now</button>' +
+      '<p class="hint">Invalid referrals are also re-checked automatically every hour and whenever the person verifies, watches an ad or buys a plan.</p></form>' +
+
+      '<div class="page-head"><div><h2>Withdraw requirement</h2><p class="sub">Minimum valid referrals a user needs before they can request a payout. Both numbers must be reached. 0 = no requirement.</p></div></div>' +
+      '<form class="card form" id="pg" novalidate><div class="two">' +
+      Z.field({ id: 'g1', label: 'Valid Level 1', value: s.payout_req_l1, attrs: 'inputmode="numeric"' }) +
+      Z.field({ id: 'g2', label: 'Valid Level 2', value: s.payout_req_l2, attrs: 'inputmode="numeric"' }) + '</div>' +
+      '<div id="pgerr"></div><button class="btn btn-primary btn-block" type="submit">Save withdraw requirement</button></form>' +
+
+      '<div class="page-head"><div><h2>Milestones and rewards</h2><p class="sub">When a user reaches a target number of valid referrals, the reward is added to their Main Wallet automatically. Each user gets each milestone only once. Leave a level empty to hide it.</p></div></div>' +
+      '<form class="card form" id="ms" novalidate>' +
+      '<h3 class="mini-title" style="margin:0">Level 1 (direct)</h3><div id="ms1" class="ms-ed"></div>' +
+      '<button class="btn btn-tonal btn-block" type="button" data-addms="1">' + Z.icon('plus') + 'Add Level 1 milestone</button>' +
+      '<h3 class="mini-title" style="margin:6px 0 0">Level 2 (indirect)</h3><div id="ms2" class="ms-ed"></div>' +
+      '<button class="btn btn-tonal btn-block" type="button" data-addms="2">' + Z.icon('plus') + 'Add Level 2 milestone</button>' +
+      '<p class="hint">Reward 0 = the milestone is shown but pays nothing. Users who already have enough valid referrals are paid when you save, and you see the total first. Changing an amount later only affects users who have not received that milestone yet.</p>' +
+      '<div id="mserr"></div><button class="btn btn-primary btn-block" type="submit">Save milestones</button></form>' +
 
       '<div class="page-head"><div><h2>All referrals</h2><p class="sub">Who referred whom, with name, email and date.</p></div></div>' +
       '<div class="search">' + Z.icon('search') + '<input class="input" id="rfq" type="search" placeholder="Search name or email" autocomplete="off"></div>' +
@@ -801,6 +833,105 @@
         if (u.error) throw u.error;
         Z.state.settings = u.data; Z.formError(err, '');
         Z.toast('Referral settings saved', 'ok');
+      }, err);
+    });
+
+    function saveSettings(form, errSel, patch, okMsg) {
+      var err = Z.$(errSel, body);
+      Z.run(Z.$('button[type=submit]', form), async function () {
+        var u = await sb.from('platform_settings').update(patch).eq('id', true).select().single();
+        if (u.error) throw u.error;
+        Z.state.settings = u.data; Z.formError(err, '');
+        Z.toast(okMsg, 'ok');
+      }, err);
+    }
+    function wholeNum(id, max) { var v = String(Z.$(id, body).value).trim(); return /^\d+$/.test(v) && Number(v) <= max ? Number(v) : NaN; }
+
+    Z.$('#rq', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#rqerr', body);
+      var earn = parseFloat(String(Z.$('#q-earn', body).value).replace(/,/g, '') || '0');
+      var p = {
+        ref_req_ads: wholeNum('#q-ads', 1000), ref_req_distinct_ads: wholeNum('#q-dad', 1000), ref_req_age_days: wholeNum('#q-age', 365),
+        ref_req_active_days: wholeNum('#q-act', 365), ref_req_earned: earn,
+        ref_req_email: Z.$('#q-mail', body).value === '1', ref_req_plan: Z.$('#q-plan', body).value === '1',
+        ref_req_paid_plan: Z.$('#q-paid', body).value === '1', ref_req_device: Z.$('#q-dev', body).value === '1'
+      };
+      if ([p.ref_req_ads, p.ref_req_distinct_ads, p.ref_req_age_days, p.ref_req_active_days].some(function (n) { return !isFinite(n); })) return Z.formError(err, 'Use whole numbers: ads up to 1000, days up to 365.');
+      if (!isFinite(p.ref_req_earned) || p.ref_req_earned < 0 || p.ref_req_earned > 1000000) return Z.formError(err, 'Total earned must be zero or more.');
+      if (p.ref_req_distinct_ads > 0 && p.ref_req_ads > 0 && p.ref_req_distinct_ads > p.ref_req_ads) return Z.formError(err, 'Different ads cannot be more than the ads completed.');
+      saveSettings(this, '#rqerr', p, 'Requirements saved. New rules apply to referrals that are not valid yet.');
+    });
+    Z.$('#rqre', body).addEventListener('click', function () {
+      var b = this;
+      Z.run(b, async function () {
+        var r = await sb.rpc('admin_revalidate_referrals');
+        if (r.error) throw r.error;
+        Z.toast(r.data > 0 ? r.data + ' referrals became valid' : 'No referral changed', 'ok');
+        Z.route();
+      });
+    });
+    Z.$('#pg', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#pgerr', body), p = { payout_req_l1: wholeNum('#g1', 100000), payout_req_l2: wholeNum('#g2', 100000) };
+      if (!isFinite(p.payout_req_l1) || !isFinite(p.payout_req_l2)) return Z.formError(err, 'Use whole numbers from 0 to 100000.');
+      saveSettings(this, '#pgerr', p, p.payout_req_l1 || p.payout_req_l2 ? 'Saved. Users need these valid referrals to withdraw.' : 'Saved. No referral requirement to withdraw.');
+    });
+    /* ---- milestones editor: one row per milestone (valid referrals + reward) ---- */
+    function msRowHtml(t, rw) {
+      return '<div class="ms-ed-row"><input class="input" inputmode="numeric" placeholder="Valid referrals" aria-label="Valid referrals" value="' + Z.esc(t) + '">' +
+        '<input class="input" inputmode="decimal" placeholder="Reward" aria-label="Reward" value="' + Z.esc(rw) + '">' +
+        '<button type="button" class="icon-btn" data-delms aria-label="Remove milestone">' + Z.icon('trash') + '</button></div>';
+    }
+    [1, 2].forEach(function (lv) {
+      Z.$('#ms' + lv, body).innerHTML = msRows.filter(function (m) { return m.level === lv; }).map(function (m) { return msRowHtml(m.target, Number(m.reward)); }).join('');
+    });
+    Z.$('#ms', body).addEventListener('click', function (e) {
+      var add = e.target.closest('[data-addms]'), del = e.target.closest('[data-delms]');
+      if (add) {
+        var box = Z.$('#ms' + add.getAttribute('data-addms'), body);
+        if (Z.$$('.ms-ed-row', box).length >= 10) return Z.toast('Up to 10 milestones per level.');
+        box.insertAdjacentHTML('beforeend', msRowHtml('', ''));
+        Z.$$('.ms-ed-row input', box).slice(-2)[0].focus();
+      } else if (del) del.closest('.ms-ed-row').remove();
+    });
+    function readMs(lv) {
+      var items = [], seen = {}, bad = '';
+      Z.$$('#ms' + lv + ' .ms-ed-row', body).forEach(function (row) {
+        var f = Z.$$('input', row), tv = f[0].value.trim(), rv = f[1].value.trim().replace(/,/g, '');
+        if (!tv && !rv) return;   // empty row: ignore
+        var t = /^\d+$/.test(tv) ? Number(tv) : NaN, rw = rv === '' ? 0 : Number(rv);
+        if (!isFinite(t) || t < 1 || t > 100000) bad = 'Level ' + lv + ': valid referrals must be a whole number from 1 to 100000.';
+        else if (!isFinite(rw) || rw < 0 || rw > 100000) bad = 'Level ' + lv + ': reward must be 0 or more.';
+        else if (seen[t]) bad = 'Level ' + lv + ': the target ' + t + ' is listed twice.';
+        seen[t] = 1; items.push({ target: t, reward: Math.round(rw * 100) / 100 });
+      });
+      items.sort(function (a, b) { return a.target - b.target; });
+      return { items: items, bad: bad };
+    }
+    Z.$('#ms', body).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = Z.$('#mserr', body), a = readMs(1), b = readMs(2);
+      if (a.bad || b.bad) return Z.formError(err, a.bad || b.bad);
+      Z.run(Z.$('#ms button[type=submit]', body), async function () {
+        var pv = await Promise.all([sb.rpc('admin_milestones_preview', { p_level: 1, p_items: a.items }), sb.rpc('admin_milestones_preview', { p_level: 2, p_items: b.items })]);
+        if (pv[0].error || pv[1].error) throw (pv[0].error || pv[1].error);
+        var pay = Number(pv[0].data.payments) + Number(pv[1].data.payments), total = Number(pv[0].data.total) + Number(pv[1].data.total);
+        if (pay > 0) {
+          var ok = await Z.confirm({
+            title: 'Pay ' + Z.money(total) + ' now?',
+            text: pay + (pay === 1 ? ' payment' : ' payments') + ' will be added to Main Wallets right away, for users who already have enough valid referrals. This cannot be undone.',
+            confirm: 'Save and pay', cancel: 'Go back', danger: true
+          });
+          if (!ok) return;
+        }
+        var s1 = await sb.rpc('admin_save_milestones', { p_level: 1, p_items: a.items });
+        if (s1.error) throw s1.error;
+        var s2 = await sb.rpc('admin_save_milestones', { p_level: 2, p_items: b.items });
+        if (s2.error) throw s2.error;
+        Z.formError(err, '');
+        Z.toast('Milestones saved' + (pay > 0 ? '. Rewards paid.' : ''), 'ok');
+        Z.route();
       }, err);
     });
 

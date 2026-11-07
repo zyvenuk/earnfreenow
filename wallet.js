@@ -14,6 +14,7 @@
     referral_unlock_out: { label: 'Moved to Main Wallet', icon: 'refresh', cls: '' },
     referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
     referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
+    referral_milestone: { label: 'Milestone reward', icon: 'trophy', cls: 'pos' },
     admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' },
     plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' },
     app_purchase: { label: 'Premium app', icon: 'download', cls: 'neg' },
@@ -118,7 +119,7 @@
     var PAGE = 20;
     var TXF = {
       all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
-      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission'],
+      referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission', 'referral_milestone'],
       other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund', 'app_purchase']
     };
     var f = 'all', items = [], done = false, loading = false;

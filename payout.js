@@ -47,15 +47,17 @@
   };
 
   Z.views.payout = async function (el, ctx) {
-    var s = await Z.loadSummary(true);
-    var st = Z.state.settings;
+    var both = await Promise.all([Z.loadSummary(true), sb.rpc('my_payout_referral_gate')]);
+    var s = both[0], st = Z.state.settings;
     if (ctx.stale()) return;
+    var gate = both[1].data || { req_l1: 0, req_l2: 0, have_l1: 0, have_l2: 0 };   // valid referrals needed to withdraw (the database enforces it too)
+    var gateOk = Number(gate.have_l1) >= Number(gate.req_l1) && Number(gate.have_l2) >= Number(gate.req_l2);
 
     var hist = [], histDone = false, histLoading = false, histExpanded = false;
     var method = null;
     var min = Number(st.min_payout);
     var pBlocked = Z.maint.active('payout');   // payout maintenance: history stays visible, new requests are closed
-    var canRequest = st.payouts_enabled && s.status === 'active' && !pBlocked;
+    var canRequest = st.payouts_enabled && s.status === 'active' && !pBlocked && gateOk;
 
     el.innerHTML = '<section class="page">' +
       '<div class="card info-card"><div class="ic-line"><span>Available balance</span><b id="avail">' + Z.moneyHtml(s.balance) + '</b></div>' +
@@ -67,6 +69,10 @@
       '</div>' +
       Z.maint.notices(['payout']) +
       (!st.payouts_enabled ? '<div class="alert a-warn">' + Z.icon('alert') + '<div>Payouts are paused right now. Please check back later.</div></div>' : '') +
+      (!gateOk ? '<div class="alert a-warn">' + Z.icon('users') + '<div><b>Valid referrals needed to withdraw</b><br>' +
+        (Number(gate.req_l1) > 0 ? 'Level 1: ' + Math.min(gate.have_l1, gate.req_l1) + ' of ' + gate.req_l1 + ' valid<br>' : '') +
+        (Number(gate.req_l2) > 0 ? 'Level 2: ' + Math.min(gate.have_l2, gate.req_l2) + ' of ' + gate.req_l2 + ' valid<br>' : '') +
+        '<button type="button" class="link-btn" data-go="/referral">Invite friends</button></div></div>' : '') +
       (s.status !== 'active' ? '<div class="alert a-error">' + Z.icon('alert') + '<div>Your account is suspended, so payouts are unavailable.</div></div>' : '') +
       '<div class="section-head"' + (pBlocked ? ' hidden' : '') + '><h3>Request a payout</h3></div>' +
       '<form class="card form" id="pf" novalidate' + (pBlocked ? ' hidden' : '') + '>' +
