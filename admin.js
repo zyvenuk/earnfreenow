@@ -4,7 +4,7 @@
   var Z = window.Z;
 
   var TABS = [
-    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['promotions', 'Promotions', 'megaphone'], ['promoservices', 'Promo services', 'sliders'], ['banners', 'Banners', 'layout'], ['apps', 'Apps store', 'download'], ['chat', 'Community chat', 'chat'], ['devices', 'Devices', 'phone'], ['cleanup', 'Cleanup', 'trash'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'],
+    ['dashboard', 'Dashboard', 'grid'], ['payouts', 'Payouts', 'payout'], ['users', 'Users', 'users'], ['promotions', 'Promotions', 'megaphone'], ['promoservices', 'Promo services', 'sliders'], ['banners', 'Banners', 'layout'], ['apps', 'Apps store', 'download'], ['chat', 'Community chat', 'chat'], ['devices', 'Devices', 'phone'], ['cleanup', 'Cleanup', 'trash'], ['plans', 'Plans', 'layout'], ['subscriptions', 'Subscriptions', 'receipt'], ['badges', 'Badges', 'shield'], ['rewards', 'Rewards', 'coin'], ['referrals', 'Referrals', 'gift'], ['checkin', 'Daily check-in', 'calendar'],
     ['ads', 'Ads', 'play'], ['adsterra', 'Adsterra', 'layout'], ['maintenance', 'Maintenance', 'wrench'], ['announcements', 'Announcements', 'megaphone'], ['transactions', 'Transactions', 'receipt'], ['settings', 'Settings', 'sliders']
   ];
   var PAGE = 20;
@@ -117,6 +117,7 @@
   SECTIONS.apps = function (body, ctx) { return Z.appsAdmin.list(body, ctx); };
   SECTIONS.chat = function (body, ctx) { return Z.chatAdmin.render(body, ctx); };
   SECTIONS.cleanup = function (body, ctx) { return Z.cleanupAdmin.view(body, ctx); };
+  SECTIONS.checkin = function (body, ctx) { return Z.checkinAdmin.view(body, ctx); };
 
   /* ---------------- Plans, subscriptions, badges (see plans-admin.js) ---------------- */
   SECTIONS.plans = function (body, ctx) { return Z.plansAdmin.plans(body, ctx); };

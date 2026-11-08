@@ -15,6 +15,8 @@
     referral_unlock_in: { label: 'Referral bonus unlocked', icon: 'gift', cls: 'pos' },
     referral_commission: { label: 'Referral commission', icon: 'users', cls: 'pos' },
     referral_milestone: { label: 'Milestone reward', icon: 'trophy', cls: 'pos' },
+    checkin_reward: { label: 'Daily check-in', icon: 'calendar', cls: 'pos' },
+    checkin_milestone: { label: 'Streak reward', icon: 'trophy', cls: 'pos' },
     admin_reward: { label: 'Reward from Zyven', icon: 'gift', cls: 'pos' },
     plan_purchase: { label: 'Plan purchase', icon: 'layout', cls: 'neg' },
     app_purchase: { label: 'Premium app', icon: 'download', cls: 'neg' },
@@ -77,6 +79,7 @@
       (pv ? '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button>' : '') + '</div></div></div>';
 
     html += Z.followCard();     // official channels: right under the balance card
+    html += Z.checkin.homeCard(s);   // daily check-in streak
     html += Z.banners.slot();   // promotional carousel (filled from the database, hidden when there is nothing to show)
 
     html += '<div class="quick-grid">' +
@@ -110,6 +113,7 @@
     el.innerHTML = html;
     if (pst) Z.plans.tickLeft(el);
     Z.pwa.bindCards(el);
+    Z.checkin.bindHome(el);
     Z.banners.mount(Z.$('#bn', el), ctx);
     Z.slots.attach(el, ctx);
   };
@@ -118,7 +122,7 @@
   Z.views.activity = async function (el, ctx) {
     var PAGE = 20;
     var TXF = {
-      all: null, rewards: ['ad_reward'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
+      all: null, rewards: ['ad_reward'], checkin: ['checkin_reward', 'checkin_milestone'], payouts: ['payout_request', 'payout_paid', 'payout_rejected', 'payout_cancelled'],
       referral: ['referral_bonus', 'referral_unlock_out', 'referral_unlock_in', 'referral_commission', 'referral_milestone'],
       other: ['admin_adjustment', 'admin_reward', 'plan_purchase', 'promo_payment', 'promo_refund', 'app_purchase']
     };
@@ -126,7 +130,7 @@
 
     el.innerHTML = '<section class="page">' +
       '<div class="section-head"><h3>All transactions</h3><button class="link-btn" id="txclear">Clear history</button></div>' +
-      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-tf') +
+      Z.chips([['all', 'All'], ['rewards', 'Rewards'], ['checkin', 'Check-in'], ['referral', 'Referral'], ['payouts', 'Payouts'], ['other', 'Adjustments']], 'all', 'data-tf') +
       '<div class="card" id="tx"></div><div id="txmore"></div></section>';
 
     var box = Z.$('#tx', el), more = Z.$('#txmore', el);

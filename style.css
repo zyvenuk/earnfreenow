@@ -767,3 +767,69 @@ body[data-mode="admin"] #view { max-width: 920px; }
 .ms-ed { display: flex; flex-direction: column; gap: 8px; }
 .ms-ed-row { display: grid; grid-template-columns: 1fr 1fr 40px; gap: 8px; align-items: center; }
 .ms-ed-row .icon-btn { width: 40px; height: 40px; }
+
+/* ---- Daily check-in ---- */
+.ci-hero { padding: 16px; display: flex; flex-direction: column; gap: 12px; background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%); }
+.ci-top { display: flex; align-items: center; gap: 12px; }
+.ci-cal { flex: none; width: 60px; height: 60px; display: grid; place-items: center; border-radius: 18px; color: #fff; background: linear-gradient(135deg, var(--hero), var(--hero-2)); }
+.ci-cal .ic { width: 34px; height: 34px; }
+.ci-mid { flex: 1; min-width: 0; text-align: center; }
+.ci-mid small { display: block; font-size: 14px; font-weight: 700; }
+.ci-streak { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ci-streak b { font-size: 46px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.ci-streak > span:last-child { align-self: flex-end; padding-bottom: 6px; font-size: 19px; font-weight: 800; color: var(--accent); }
+.ci-flame .ic { width: 34px; height: 34px; fill: #FF9A1F; stroke: #F2561D; }
+.ci-badge { flex: none; width: 92px; padding: 10px 6px; border-radius: 16px; text-align: center; color: #fff; background: linear-gradient(135deg, var(--hero), var(--hero-2)); }
+.ci-badge b { display: block; font-size: 28px; line-height: 1; }
+.ci-badge span { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 650; line-height: 1.15; }
+.ci-sub { margin: 0; text-align: center; color: var(--muted); font-size: 13.5px; }
+.ci-bar { position: relative; height: 16px; margin-right: 10px; border-radius: 8px; background: var(--surface-2); }
+.ci-bar i { display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, var(--hero), var(--accent)); transition: width .4s; }
+.ci-star { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); }
+.ci-star .ic { width: 30px; height: 30px; fill: #FFC93C; stroke: #E59A00; }
+.ci-next { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px 14px; padding: 9px 14px; border-radius: 999px; color: #fff; font-size: 14px; background: linear-gradient(135deg, var(--hero), var(--hero-2)); }
+.ci-next .ic { width: 18px; height: 18px; margin-right: 5px; vertical-align: -4px; }
+.ci-next b { color: #FFD84D; }
+.ci-next i { width: 1px; height: 16px; background: rgba(255,255,255,.5); }
+.ci-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ci-stats div { padding: 8px 4px; text-align: center; border-radius: 12px; background: var(--surface-2); }
+.ci-stats b { display: block; font-size: 16px; }
+.ci-stats span { font-size: 11.5px; color: var(--muted); }
+.ci-done-btn { background: var(--pos-soft); color: var(--pos); opacity: 1 !important; }
+.ci-hint { margin: -4px 0 0; text-align: center; }
+.ci-calendar { padding: 0; overflow: hidden; }
+.ci-cal-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; color: #fff; background: linear-gradient(135deg, var(--hero), var(--hero-2)); }
+.ci-cal-head > .ic { width: 26px; height: 26px; }
+.ci-cal-head b { flex: 1; font-size: 17px; }
+.ci-month { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 13px; }
+.ci-month em { min-width: 96px; padding: 0 6px; text-align: center; font-style: normal; font-weight: 650; }
+.ci-month button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
+.ci-month button:disabled { opacity: .35; }
+.ci-month .ic { width: 16px; height: 16px; }
+.ci-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 12px; }
+.ci-d { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); }
+.ci-d b { font-size: 15px; color: var(--text); }
+.ci-d .ic { width: 16px; height: 16px; }
+.ci-d small { font-size: 9.5px; font-weight: 700; }
+.ci-d.ok { background: var(--pos-soft); border-color: transparent; color: var(--pos); }
+.ci-d.ok .ic { stroke-width: 3; }
+.ci-d.future { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.ci-d.miss { background: transparent; opacity: .55; }
+.ci-d.today { border-color: #FFC93C; box-shadow: 0 0 0 2px rgba(255,201,60,.45); background: linear-gradient(135deg, var(--hero), var(--hero-2)); color: #FFD84D; }
+.ci-d.today b { color: #fff; }
+.ci-leg { margin: -4px 12px 12px; text-align: center; }
+.ci-leg .ic { width: 14px; height: 14px; vertical-align: -2px; }
+.ci-promo { display: flex; align-items: center; gap: 12px; padding: 14px; background: linear-gradient(135deg, var(--accent-soft), var(--surface)); }
+.ci-trophy { flex: none; color: #F2A900; }
+.ci-trophy .ic { width: 48px; height: 48px; fill: #FFC93C; stroke: #D98F00; stroke-width: 1.4; }
+.ci-promo-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ci-promo-t b { font-size: 16px; }
+.ci-promo-t span { font-size: 12.5px; color: var(--muted); }
+.ci-promo .btn { flex: none; }
+.ci-promo .btn .ic { width: 16px; height: 16px; margin-left: 2px; }
+.ci-ben { display: flex; flex-direction: column; margin: 10px 0 14px; }
+.ci-cel { text-align: center; }
+.ci-cel-ic .ic { width: 64px; height: 64px; fill: #FFC93C; stroke: #D98F00; stroke-width: 1.4; }
+.ci-home .ci-fl .ic { width: 14px; height: 14px; margin-right: 3px; vertical-align: -2px; fill: #FF9A1F; stroke: #F2561D; }
+.ci-done { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--pos-soft); color: var(--pos); }
+.ci-done .ic { width: 18px; height: 18px; stroke-width: 3; }
