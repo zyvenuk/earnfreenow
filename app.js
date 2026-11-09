@@ -50,6 +50,7 @@
     Z.$$('.nav-item').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-tab') === active); });
     if (mode === 'app' && Z.state.summary) Z.updateBalanceChip();
     if (Z.updateBell) Z.updateBell();
+    if (Z.updateNavDots) Z.updateNavDots();
   }
 
   Z.route = async function () {
@@ -96,7 +97,7 @@
     chrome(name, mode);
     if (mode === 'app' && name !== 'notifications') Z.refreshUnread();
     window.scrollTo(0, 0);
-    view.innerHTML = mode === 'auth' ? '' : '<section class="page">' + Z.skel(3, 90) + '</section>';
+    view.innerHTML = mode === 'auth' ? '' : '<section class="page is-loading">' + Z.skelFor(name) + '</section>';   // same shapes as the page, no data
 
     try {
       await Z.views[name](view, ctx);

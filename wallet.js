@@ -47,6 +47,36 @@
     return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Good night';
   }
 
+
+  /* Home: shortcuts (only sections that are switched on) */
+  function quickAccess(pv) {
+    var t = [];
+    if (Z.plans.enabled()) t.push(['/plans', 'layout', 'Plans']);
+    t.push(['/referral', 'gift', 'Refer']);
+    if (Z.promos.enabled()) t.push(['/promotions', 'megaphone', 'Promote']);
+    if (Z.appsVisible()) t.push(['/apps', 'download', 'Apps']);
+    if (Z.leaderboard.enabled()) t.push(['/leaderboard', 'trophy', 'Ranking']);
+    t.push(['/support', 'lifebuoy', 'Support']);
+    return '<div class="qa-grid">' + t.slice(0, 8).map(function (x) {
+      return '<button class="qa" data-go="' + x[0] + '"><span class="qa-ic">' + Z.icon(x[1]) + '</span><span>' + x[2] + '</span></button>';
+    }).join('') + '</div>';
+  }
+
+  /* Home: referral overview (counts come with the summary) */
+  function referralOverview(s) {
+    var total = Number(s.ref_total) || 0, l1 = Number(s.ref_l1) || 0, l2 = Number(s.ref_l2) || 0, valid = l1 + l2;
+    if (!total) {
+      return '<div class="card ref-ov"><div class="ov-head"><span class="row-ic acc">' + Z.icon('gift') + '</span><div class="row-main"><span class="row-title">Referrals</span><span class="row-sub">Share your code to start earning</span></div></div>' +
+        Z.empty({ icon: 'users', title: 'No referrals yet', text: 'When friends join with your code and become valid, you earn bonuses and commission.', action: '<button class="btn btn-primary" data-go="/referral">Invite friends</button>' }) + '</div>';
+    }
+    return '<div class="card ref-ov"><button class="ov-head row-btn" data-go="/referral" style="padding:0;background:none;border:0;text-align:left"><span class="row-ic acc">' + Z.icon('gift') + '</span>' +
+      '<div class="row-main"><span class="row-title">Referrals</span><span class="row-sub">Level 1 and Level 2 overview</span></div>' + Z.icon('chevron', 'row-chev') + '</button>' +
+      '<div class="ov-stats"><div><b data-count="' + l1 + '" data-kind="int" data-ck="rl1">' + l1 + '</b><span>Level 1 valid</span></div>' +
+      '<div><b data-count="' + l2 + '" data-kind="int" data-ck="rl2">' + l2 + '</b><span>Level 2 valid</span></div>' +
+      '<div><b data-count="' + total + '" data-kind="int" data-ck="rtotal">' + total + '</b><span>All referrals</span></div></div>' +
+      Z.progress({ label: 'Valid referrals', value: valid, max: total, right: valid + ' of ' + total }) + '</div>';
+  }
+
   /* ---------------- Home ---------------- */
   Z.views.home = async function (el, ctx) {
     var both = await Promise.all([Z.loadSummary(true), Z.refreshSettings(false, 30000).catch(function () {})]);
@@ -71,26 +101,30 @@
       Z.icon('chevron', 'row-chev') + '</button>' +
       '<div class="hero-body">' +
       '<span class="bc-label">Main Wallet balance</span>' +
-      '<div class="bc-amount">' + Z.moneyHtml(s.balance) + '</div>' +
-      '<div class="bc-stats"><div><b>' + Z.moneyHtml(s.today_earned) + '</b><span>Earned today</span></div>' +
-      '<div><b>' + s.today_views + '</b><span>Ads today</span></div>' +
-      '<button class="bc-ref" data-go="/referral"><b>' + Z.moneyHtml(s.referral_balance) + '</b><span>Referral, locked</span></button></div>' +
+      '<div class="bc-amount" data-count="' + Number(s.balance) + '" data-kind="money" data-ck="balance">' + Z.moneyHtml(s.balance) + '</div>' +
+      '<div class="bc-stats"><div><b data-count="' + Number(s.today_earned) + '" data-kind="money" data-ck="today">' + Z.moneyHtml(s.today_earned) + '</b><span>Earned today</span></div>' +
+      '<div><b data-count="' + Number(s.today_views) + '" data-kind="int" data-ck="views">' + s.today_views + '</b><span>Ads today</span></div>' +
+      '<button class="bc-ref" data-go="/referral"><b data-count="' + Number(s.referral_balance) + '" data-kind="money" data-ck="refbal">' + Z.moneyHtml(s.referral_balance) + '</b><span>Referral, locked</span></button></div>' +
       '<div class="bc-actions"><button class="btn btn-light" data-go="/watch">' + Z.icon('play') + 'Watch ads</button>' +
       (pv ? '<button class="btn btn-glass" data-go="/payout">' + Z.icon('payout') + 'Withdraw</button>' : '') + '</div></div></div>';
 
-    html += Z.followCard();     // official channels: right under the balance card
+    html += Z.followCard();          // official channels: right under the balance card
+    html += quickAccess(pv);         // shortcuts to the main sections
     html += Z.checkin.homeCard(s);   // daily check-in streak
-    html += Z.banners.slot();   // promotional carousel (filled from the database, hidden when there is nothing to show)
+    html += Z.banners.slot();        // promotional carousel (filled from the database, hidden when there is nothing to show)
 
-    html += '<div class="quick-grid">' +
-      '<button class="quick" data-go="/referral"><span class="quick-ic">' + Z.icon('gift') + '</span><span class="quick-t"><b>Invite friends</b><span>Earn from referrals</span></span></button>' +
-      '<button class="quick" data-go="/support"><span class="quick-ic">' + Z.icon('lifebuoy') + '</span><span class="quick-t"><b>Support</b><span>Get help</span></span></button></div>';
+    // Earnings: real numbers from the summary, last 7 days as a tappable chart
+    html += Z.weekChart(s.week,
+      '<div><b data-count="' + Number(s.total_earned) + '" data-kind="money" data-ck="earned">' + Z.moneyHtml(s.total_earned) + '</b><span>Total earned</span></div>' +
+      '<div><b data-count="' + Number(s.total_paid_out) + '" data-kind="money" data-ck="paid">' + Z.moneyHtml(s.total_paid_out) + '</b><span>Paid out</span></div>' +
+      '<div><b data-count="' + Number(s.available_ads) + '" data-kind="int" data-ck="ready">' + s.available_ads + '</b><span>Ads ready</span></div>');
 
+    html += Z.plans.homeCard(pst);
+    html += referralOverview(s);
+    html += Z.promos.homeCard(s.promo_live);
     html += Z.leaderboard.homeCard();
-    html += Z.promos.homeCard();
     html += Z.apps.homeCard();
     html += Z.chat.homeCard();
-    html += Z.plans.homeCard(pst);
     html += Z.pwa.cards();
 
     html += Z.slots.html('home_top');
@@ -112,6 +146,8 @@
     html += Z.slots.html('home_bottom') + '</section>';
     el.innerHTML = html;
     if (pst) Z.plans.tickLeft(el);
+    Z.weekBind(el, s.week);
+    Z.countUp(el);
     Z.pwa.bindCards(el);
     Z.checkin.bindHome(el);
     Z.banners.mount(Z.$('#bn', el), ctx);

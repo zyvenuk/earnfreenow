@@ -25,11 +25,9 @@
     return 'Day ' + d.streak + ' checked in' + (t > 0 ? '. ' + Z.money(t) + ' added to your Main Wallet' : '');
   }
   function celebrate(d) {
-    if (!(Number(d.bonus) > 0)) return;
-    Z.sheet('<div class="ci-cel"><span class="ci-cel-ic">' + Z.icon('trophy') + '</span>' +
-      '<h2 class="sheet-title">' + days(d.streak) + ' streak!</h2>' +
-      '<p class="muted">You earned a streak reward of <b>' + Z.money(d.bonus) + '</b>' + (Number(d.reward) > 0 ? ' plus <b>' + Z.money(d.reward) + '</b> for today' : '') + '. It is already in your Main Wallet.</p>' +
-      '<button class="btn btn-primary btn-block" data-close>Great</button></div>', { center: true });
+    if (!(Number(d.bonus) > 0)) return;   // only when a streak reward was really paid
+    Z.celebrate({ title: days(d.streak) + ' streak!', amount: d.bonus,
+      text: 'Your streak reward is already in your Main Wallet' + (Number(d.reward) > 0 ? ', plus today\u2019s check-in reward.' : '.') });
   }
   async function tap() {
     var r = await sb.rpc('do_checkin');
@@ -41,13 +39,21 @@
   }
 
   /* ---------------- Home card (the summary already carries the streak, so no extra request) ---------------- */
+  function weekStrip(n, done) {
+    var out = '';
+    for (var i = 0; i < 7; i++) {   // the last dot is today
+      var back = 6 - i, on = done ? back < n : (back >= 1 && back <= n);
+      out += '<i class="' + (on ? 'on' : (back === 0 && !done ? 'now' : '')) + '"></i>';
+    }
+    return '<span class="ci-week" aria-hidden="true">' + out + '</span>';
+  }
   C.homeCard = function (s) {
     if (!s || !s.checkin_enabled) return '';
     var n = Number(s.checkin_streak) || 0, done = !!s.checkin_done;
     return '<div class="card ci-home"><button class="row row-btn" data-go="/checkin">' +
       '<span class="row-ic acc">' + Z.icon('calendar') + '</span>' +
       '<span class="row-main"><span class="row-title">Daily Check-in</span><span class="row-sub">' +
-      (n > 0 ? '<span class="ci-fl">' + Z.icon('flame') + '</span>' + days(n) + ' streak' + (done ? ' \u00b7 checked in today' : ' \u00b7 check in to keep it') : 'Start your streak today') + '</span></span>' +
+      (n > 0 ? '<span class="ci-fl">' + Z.icon('flame') + '</span>' + days(n) + ' streak' + (done ? ' \u00b7 checked in today' : ' \u00b7 check in to keep it') : 'Start your streak today') + '</span>' + weekStrip(n, done) + '</span>' +
       (done ? '<span class="ci-done">' + Z.icon('check') + '</span>' : '<span class="btn btn-primary btn-sm" role="button" data-ci-now>Check in</span>') +
       '</button></div>';
   };
@@ -93,7 +99,7 @@
       }
       return '<div class="card ci-hero">' +
         '<div class="ci-top"><span class="ci-cal">' + Z.icon('calendar') + '</span>' +
-        '<div class="ci-mid"><small>Daily Check-in Streak</small><div class="ci-streak"><span class="ci-flame">' + Z.icon('flame') + '</span><b>' + n + '</b><span>' + (n === 1 ? 'Day' : 'Days') + '</span></div></div>' +
+        '<div class="ci-mid"><small>Daily Check-in Streak</small><div class="ci-streak"><span class="ci-flame">' + Z.icon('flame') + '</span><b data-count="' + n + '" data-kind="int" data-ck="streak">' + n + '</b><span>' + (n === 1 ? 'Day' : 'Days') + '</span></div></div>' +
         '<div class="ci-badge"><b>' + (unlimited ? '\u221e' : st.milestones.length) + '</b><span>' + (unlimited ? 'Unlimited Milestones' : 'Streak Milestones') + '</span></div></div>' +
         '<p class="ci-sub">' + sub + '</p>' +
         '<div class="ci-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + pct + '%"></i><span class="ci-star">' + Z.icon('star') + '</span></div>' +
@@ -158,6 +164,7 @@
       '<div class="card ci-promo"><span class="ci-trophy">' + Z.icon('trophy') + '</span>' +
       '<div class="ci-promo-t"><b>Reach Higher Milestones!</b><span>Continue your daily streak to unlock bigger rewards!</span></div>' +
       '<button class="btn btn-primary btn-sm" id="cibenef">Streak Benefits' + Z.icon('chevron') + '</button></div></section>';
+    Z.countUp(el);
     var cal = Z.$('#cical', el);
     await loadMonth();
     if (ctx.stale()) return;

@@ -16,10 +16,12 @@
 
   PR.enabled = function () { return !(Z.state.settings && Z.state.settings.promotions_enabled === false); };
 
-  PR.homeCard = function () {
+  PR.homeCard = function (live) {
     if (!PR.enabled()) return '';
+    var n = Number(live) || 0;   // promotions live right now (comes with the summary, no extra request)
     return '<div class="card"><button class="row row-btn" data-go="/promotions"><span class="row-ic acc">' + Z.icon('megaphone') + '</span>' +
-      '<span class="row-main"><span class="row-title">Promotions</span><span class="row-sub">Discover channels or promote your own</span></span>' + Z.icon('chevron', 'row-chev') + '</button></div>';
+      '<span class="row-main"><span class="row-title">Promotions' + (n > 0 ? ' <span class="badge b-valid">' + n + ' live</span>' : '') + '</span>' +
+      '<span class="row-sub">' + (n > 0 ? 'Discover channels or promote your own' : 'Be the first to promote your channel or account') + '</span></span>' + Z.icon('chevron', 'row-chev') + '</button></div>';
   };
 
   /* ---------- Logos ----------

@@ -94,7 +94,7 @@
     var levels = msLevel(1, c1, d.items) + msLevel(2, c2, d.items);
     el.innerHTML = '<section class="page">' +
       '<div class="card ms-total"><span class="ms-total-ic">' + Z.icon('users') + '</span>' +
-      '<div><small>Your Total Valid Referrals</small><b>' + (c1 + c2) + '</b>' +
+      '<div><small>Your Total Valid Referrals</small><b data-count="' + (c1 + c2) + '" data-kind="int" data-ck="mstotal">' + (c1 + c2) + '</b>' +
       (Number(d.earned) > 0 ? '<span class="ms-earned">Milestone rewards earned: <b>' + Z.money(d.earned) + '</b></span>' : '') + '</div>' +
       '<span class="ms-total-ic">' + Z.icon('trophy') + '</span></div>' +
       (levels || '<div class="card">' + Z.empty({ icon: 'trophy', title: 'No milestones yet', text: 'Milestones will appear here once they are set up.' }) + '</div>') +
@@ -104,6 +104,15 @@
       var body = h.parentNode.querySelector('.ms-body'), open = body.hidden;   // hidden now -> opening
       body.hidden = !open; h.setAttribute('aria-expanded', open);
     });
+    Z.countUp(el);
+    // Celebrate only milestones that were paid since the last visit (the first visit just records what already exists)
+    var uid = Z.state.user && Z.state.user.id;
+    var got = (d.items || []).filter(function (i) { return i.claimed; });
+    var fresh = uid ? Z.unseen('ms:' + uid, got.map(function (i) { return i.level + ':' + i.target; })) : [];
+    if (fresh.length) {
+      var amt = got.filter(function (i) { return fresh.indexOf(i.level + ':' + i.target) !== -1; }).reduce(function (a, i) { return a + Number(i.paid || 0); }, 0);
+      Z.celebrate({ title: fresh.length > 1 ? 'Milestones reached!' : 'Milestone reached!', amount: amt, text: 'Your reward is already in your Main Wallet.' });
+    }
   };
 
   Z.views.referral = async function (el, ctx) {

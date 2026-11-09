@@ -353,6 +353,7 @@
     if (r.error) throw r.error;
     Z.state.summary = r.data; Z.state.summaryAt = Date.now();
     Z.updateBalanceChip();
+    if (Z.updateNavDots) Z.updateNavDots();
     if (typeof r.data.unread_notifications === 'number') {
       Z.state.unread = r.data.unread_notifications; Z.state.unreadAt = Date.now();
       if (Z.updateBell) Z.updateBell();
