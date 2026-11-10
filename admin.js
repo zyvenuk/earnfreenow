@@ -136,7 +136,7 @@
     function stat(label, value, sub, go) {
       return '<div class="stat"' + (go ? ' data-go="' + go + '" role="link"' : '') + '><span>' + label + '</span><b>' + value + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>';
     }
-    body.innerHTML = Z.maint.adminNotice() + '<div class="online-line" role="status">Online Users: <b id="online-n">0</b></div><div class="stat-grid">' +
+    body.innerHTML = Z.maint.adminNotice() + '<div class="online-line" role="status" aria-live="polite"><span class="online-dot" data-s="connecting"></span><span class="online-label">Online Users</span><b id="online-n">\u2026</b><span class="online-sub" id="online-sub">Connecting\u2026</span><button type="button" class="link-btn" id="online-retry" hidden>Retry</button></div><div class="stat-grid">' +
       stat('Users', d.users, d.new_users_today + ' new today', '/admin/users') +
       stat('Active ads', d.active_ads, '', '/admin/ads') +
       stat('Pending payouts', d.pending_payouts, d.processing_payouts + ' processing', '/admin/payouts') +
@@ -145,7 +145,26 @@
       stat('Rewards today', Z.money(d.today_rewards), '') +
       stat('Total rewards', Z.money(d.total_rewards), '') +
       stat('Total paid out', Z.money(d.total_paid), '') + '</div>';
-    Z.online.watch(function (n) { var el = Z.$('#online-n', body); if (el) el.textContent = n; });   // Presence events only, no polling
+    // Live count from Presence events (no polling). Shows the real state: connecting, live, or unavailable. Never a made-up 0.
+    var shown = null;
+    function paintOnline(n, status) {
+      var dot = Z.$('.online-dot', body), num = Z.$('#online-n', body), sub = Z.$('#online-sub', body), retryBtn = Z.$('#online-retry', body);
+      if (!dot || !num || !sub || !retryBtn) return;
+      dot.setAttribute('data-s', status);
+      retryBtn.hidden = status !== 'error';
+      if (status === 'live') {
+        num.textContent = n;
+        sub.textContent = d.users > 0 ? Math.min(100, Math.round(n / d.users * 100)) + '% of ' + d.users + ' users' : 'live';
+        if (shown !== null && shown !== n) { num.classList.remove('bump'); void num.offsetWidth; num.classList.add('bump'); }
+        shown = n;
+      } else if (status === 'error') {
+        num.textContent = '\u2014'; sub.textContent = 'Live count unavailable'; shown = null;
+      } else {
+        num.textContent = '\u2026'; sub.textContent = 'Connecting\u2026'; shown = null;
+      }
+    }
+    Z.$('#online-retry', body).addEventListener('click', function () { Z.online.watch(paintOnline); });
+    Z.online.watch(paintOnline);
   };
 
   /* ---------------- Users ---------------- */
