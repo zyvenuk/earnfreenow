@@ -143,8 +143,6 @@
     var open = plans.filter(function (p) { return p.blocked !== 'plan_already_active'; });   // plans you already run are on My Plans
     var nActive = st.active_plans.length;
     el.innerHTML = '<section class="page">' +
-      '<div class="card info-card"><div class="ic-line"><span>Main Wallet balance</span><b>' + Z.money(balance) + '</b></div>' +
-      '<div class="ic-line small"><span>Paid plans are bought from this balance only</span></div></div>' +
       '<div class="card"><button class="row row-btn" data-go="/myplans"><span class="row-ic acc">' + Z.icon('crown') + '</span>' +
       '<span class="row-main"><span class="row-title">My plans</span><span class="row-sub">' + (nActive ? plural(nActive, 'active plan') + ' \u00b7 see time left' : 'No active plan yet') + '</span></span>' +
       Z.icon('chevron', 'row-chev') + '</button></div>' +

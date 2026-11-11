@@ -38,7 +38,9 @@
   function chrome(name, mode) {
     var isTab = !!TITLES[name], sub = SUBS[name];
     setMode(mode);
-    Z.backTarget = mode === 'admin' ? '/profile' : (sub ? sub.back : '');
+    if (Z.curName !== name) { Z.prevName = Z.curName; Z.curName = name; }
+    var from = Z.prevName && TITLES[Z.prevName] && Z.prevName !== name ? '/' + Z.prevName : '';   // a main tab we just left
+    Z.backTarget = mode === 'admin' ? '/profile' : (sub ? (from || sub.back) : '');
     var ttl = mode === 'admin' ? 'Admin' : (sub ? sub.title : (TITLES[name] || 'Zyven'));
     Z.$('#bar-title').textContent = ttl;
     Z.$('#bar-title').toggleAttribute('data-long', ttl.length > 20);   // long titles get a slightly smaller font so they fit
