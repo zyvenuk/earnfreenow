@@ -18,10 +18,12 @@
   var METRICS = [['ads', 'Ads Watched'], ['referrals', 'Referrals'], ['earned', 'Earned']];
   var PERIODS = [['today', 'Today'], ['week', '7 Days'], ['month', 'This Month']];
   function label(list, key) { return list.filter(function (x) { return x[0] === key; })[0][1]; }
+  // What the board is ranked by. Referrals: only VALID ones count, Level 1 first (it is worth more), Level 2 only breaks ties.
+  function note(metric) { return metric === 'referrals' ? 'valid Level 1 referrals first, then Level 2' : label(METRICS, metric); }
 
   function valueText(metric, r) {
     if (metric === 'earned') return Z.money(r.value);
-    if (metric === 'referrals') return Number(r.value) + '<small>L1 ' + (r.l1 || 0) + ' \u00b7 L2 ' + (r.l2 || 0) + '</small>';
+    if (metric === 'referrals') return Number(r.l1 != null ? r.l1 : r.value) + '<small>L1 \u00b7 +' + (r.l2 || 0) + ' L2</small>';   // big number = Level 1 referrals
     return String(Number(r.value));
   }
 
@@ -46,7 +48,7 @@
     if (!L.enabled()) { el.innerHTML = '<section class="page">' + Z.empty({ icon: 'trophy', title: 'Leaderboard is not available', text: 'Check back soon.' }) + '</section>'; return; }
 
     var metric = 'ads', period = 'today';
-    el.innerHTML = '<section class="page"><div class="lb-title" id="lbhead"><h2>Leaderboard</h2><p>Rank by ' + label(METRICS, metric) + '</p></div>' +
+    el.innerHTML = '<section class="page"><div class="lb-title" id="lbhead"><h2>Leaderboard</h2><p>Rank by ' + note(metric) + '</p></div>' +
       Z.chips(PERIODS, period, 'data-lp') +
       '<div class="seg">' + METRICS.map(function (m) { return '<button class="seg-btn' + (m[0] === metric ? ' on' : '') + '" data-lm="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
       '<div id="lbpod"></div><div id="lbme"></div><div class="card" id="lb" hidden></div></section>';
@@ -55,7 +57,7 @@
     async function load() {
       var key = metric + '|' + period, hit = cache[key];
       pod.innerHTML = Z.skel(1, 230); box.hidden = true; meBox.innerHTML = '';
-      head.innerHTML = '<h2>Leaderboard</h2><p>Rank by ' + label(METRICS, metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
+      head.innerHTML = '<h2>Leaderboard</h2><p>Rank by ' + note(metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
       var d;
       if (hit && Date.now() - hit.at < 30000) d = hit.data;
       else {
@@ -68,14 +70,14 @@
       if (!d.enabled) { pod.innerHTML = Z.empty({ icon: 'trophy', title: 'Leaderboard is not available' }); return; }
 
       var rows = d.rows || [];
-      head.innerHTML = '<h2>Top ' + Math.min(d.size, Math.max(rows.length, 1)) + ' Users</h2><p>Rank by ' + label(METRICS, metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
+      head.innerHTML = '<h2>Top ' + Math.min(d.size, Math.max(rows.length, 1)) + ' Users</h2><p>Rank by ' + note(metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
 
       pod.innerHTML = rows.length ? podium(rows, metric)
         : '<div class="card">' + Z.empty({ icon: 'trophy', title: 'No one here yet', text: 'Be the first on the board for this period.' }) + '</div>';
 
       meBox.innerHTML = d.me
-        ? '<div class="card lb-me"><span class="lb-rank">' + d.me.rank + '</span><span class="row-main"><span class="row-title">Your rank</span><span class="row-sub">' + valueText(metric, d.me).replace(/<small>/, ' \u00b7 ').replace(/<[^>]+>/g, '') + '</span></span></div>'
-        : '<div class="alert a-info">' + Z.icon('info') + '<div>You are not ranked yet for this period. ' + (metric === 'ads' ? 'Watch an ad to get on the board.' : metric === 'referrals' ? 'Invite friends to get on the board.' : 'Earn rewards to get on the board.') + '</div></div>';
+        ? '<div class="card lb-me"><span class="lb-rank">' + d.me.rank + '</span><span class="row-main"><span class="row-title">Your rank</span><span class="row-sub">' + (metric === 'referrals' ? 'L1 ' + (d.me.l1 || 0) + ' \u00b7 L2 ' + (d.me.l2 || 0) : valueText(metric, d.me).replace(/<small>/, ' \u00b7 ').replace(/<[^>]+>/g, '')) + '</span></span></div>'
+        : '<div class="alert a-info">' + Z.icon('info') + '<div>You are not ranked yet for this period. ' + (metric === 'ads' ? 'Watch an ad to get on the board.' : metric === 'referrals' ? 'Invite friends. A referral counts once it becomes valid.' : 'Earn rewards to get on the board.') + '</div></div>';
 
       // everyone after the top 3, in full (never folded)
       var rest = rows.slice(3);
