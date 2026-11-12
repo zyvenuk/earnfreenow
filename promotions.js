@@ -81,11 +81,11 @@
   }
 
   function card(p) {
-    return '<div class="card promo-card"><div class="plan-top">' + PR.logo(p) +
+    return '<div class="card promo-card" data-pid="' + Z.esc(p.id) + '"><div class="plan-top">' + PR.logo(p) +
       '<div class="plan-name"><b>' + Z.esc(p.title) + '</b><span><i class="pop">' + Z.esc(p.service_name) + '</i> \u00b7 ' + Z.esc(p.category) + '</span></div>' +
       '<span class="pos-badge">#' + p.position + '</span></div>' +
       '<p class="plan-desc">' + Z.esc(p.description) + '</p>' +
-      '<a class="btn btn-primary btn-block" href="' + Z.esc(p.link) + '" target="_blank" rel="noopener noreferrer nofollow">' + Z.esc(p.action_label) + '</a></div>';
+      '<a class="btn btn-primary btn-block" data-pclick="' + Z.esc(p.id) + '" href="' + Z.esc(p.link) + '" target="_blank" rel="noopener noreferrer nofollow">' + Z.esc(p.action_label) + '</a></div>';
   }
 
   function mine(p) {
@@ -100,7 +100,132 @@
       '<div class="kv"><span>Position</span><b>' + (live && p.position ? '#' + p.position + ' (live)' : '#' + p.requested_pos + ' requested') + '</b></div>' +
       '<div class="kv"><span>Total paid</span><b>' + Z.money(p.total_price) + '</b></div>' +
       '<div class="kv"><span>Requested</span><b>' + Z.fmtDate(p.created_at) + '</b></div>' +
-      '<div class="kv"><span>' + (p.status === 'expired' ? 'Expired' : 'Expires') + '</span><b>' + (p.expires_at ? Z.fmtDate(p.expires_at) : 'After approval') + '</b></div></div></div>';
+      '<div class="kv"><span>' + (p.status === 'expired' ? 'Expired' : 'Expires') + '</span><b>' + (p.expires_at ? Z.fmtDate(p.expires_at) : 'After approval') + '</b></div></div>' +
+      (live || p.status === 'expired' ?
+        '<div class="pa-mini"><div><b>' + Number(p.views || 0) + '</b><span>Views</span></div><div><b>' + Number(p.clicks || 0) + '</b><span>Clicks</span></div></div>' +
+        '<button class="btn btn-tonal btn-block" data-pa="' + Z.esc(p.id) + '">' + Z.icon('layout') + (live ? 'Live analytics' : 'View results') + '</button>' : '') +
+      '</div>';
+  }
+
+
+  /* ---------------- Tracking: what members really see and tap ----------------
+     A view is counted when a card has been at least half on screen for under a second AND the tab is visible.
+     A click is counted when the action button is tapped. The database decides what counts (once per member per day for
+     views, 3 clicks per member per day, never the owner or the admin). Tracking can never break the page. */
+  var queued = {}, sentViews = {}, flushTimer = null, dwell = {}, io = null;
+  function flushViews() {
+    var ids = Object.keys(queued).slice(0, 50); queued = {}; flushTimer = null;
+    if (!ids.length) return;
+    ids.forEach(function (id) { sentViews[id] = 1; });
+    sb.rpc('promo_track_views', { p_ids: ids }).then(function (r) { if (r && r.error) ids.forEach(function (id) { delete sentViews[id]; }); }, function () { ids.forEach(function (id) { delete sentViews[id]; }); });
+  }
+  function enqueueView(id) {
+    if (sentViews[id] || queued[id]) return;
+    queued[id] = 1;
+    if (!flushTimer) flushTimer = setTimeout(flushViews, 1500);
+  }
+  function trackClick(id) { try { sb.rpc('promo_track_click', { p_id: id }).then(function () {}, function () {}); } catch (e) { /* never block the link */ } }
+  function observeCards(root) {
+    Object.keys(dwell).forEach(function (k) { clearTimeout(dwell[k]); delete dwell[k]; });
+    if (io) { io.disconnect(); io = null; }
+    if (!('IntersectionObserver' in window)) return;      // no way to know what is on screen = no counting, never a guess
+    io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var id = en.target.getAttribute('data-pid');
+        if (en.isIntersecting && en.intersectionRatio >= 0.5) {
+          if (!dwell[id]) dwell[id] = setTimeout(function () { delete dwell[id]; if (document.visibilityState === 'visible') enqueueView(id); }, 700);
+        } else if (dwell[id]) { clearTimeout(dwell[id]); delete dwell[id]; }
+      });
+    }, { threshold: [0, 0.5] });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-pid]'), function (el) { io.observe(el); });
+  }
+
+  /* ---------------- Live analytics (owner) ---------------- */
+  var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function plural(n, w) { return n + ' ' + w + (Number(n) === 1 ? '' : 's'); }
+  function leftText(ms) {
+    if (ms <= 0) return 'ended';
+    var m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+    return (d > 0 ? d + 'd ' + h + 'h' : h > 0 ? h + 'h ' + (m % 60) + 'm' : Math.max(1, m) + 'm') + ' left';
+  }
+  function agoText(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000));
+    return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + ' min ago' : s < 86400 ? Math.floor(s / 3600) + ' h ago' : Math.floor(s / 86400) + ' d ago';
+  }
+  function series(d, tab) {
+    if (tab === 'hours') {
+      return d.hours.map(function (h, i) {
+        var dt = new Date(h.t);
+        var lab = i === d.hours.length - 1 ? 'Now' : (i % 4 === 0 ? dt.toLocaleTimeString([], { hour: 'numeric' }).replace(' ', '') : '');
+        return { label: lab, tip: (i === d.hours.length - 1 ? 'This hour' : dt.toLocaleTimeString([], { hour: 'numeric' })), views: Number(h.views), clicks: Number(h.clicks) };
+      });
+    }
+    return d.days.map(function (x, i) {
+      var q = String(x.day).split('-').map(Number), w = new Date(Date.UTC(q[0], q[1] - 1, q[2])).getUTCDay();
+      return { label: i === d.days.length - 1 ? 'Today' : DOW[w], tip: (i === d.days.length - 1 ? 'Today' : DOW[w] + ', ' + MON[q[1] - 1] + ' ' + q[2]), views: Number(x.views), clicks: Number(x.clicks) };
+    });
+  }
+  function tipText(s) { return s.tip + ' \u00b7 ' + plural(s.views, 'view') + ' \u00b7 ' + plural(s.clicks, 'click'); }
+
+  function openAnalytics(promo) {
+    var data = null, tab = 'hours', sel = null, timer = null, skew = 0, drawn = false;
+    var sheet = Z.sheet('<h2 class="sheet-title">Promotion analytics</h2><p class="muted small pa-sub">' + Z.esc(promo.title) + '</p><div id="pa-body">' + Z.skel(3, 70) + '</div>' +
+      '<button class="btn btn-ghost btn-block" data-close>Close</button>', { onClose: function () { clearInterval(timer); } });
+    var body = Z.$('#pa-body', sheet.el);
+
+    function render() {
+      var d = data, live = d.status === 'active', t = d.totals, td = d.today;
+      var now = Date.now() + skew, last = Math.max(t.last_view_at ? Date.parse(t.last_view_at) : 0, t.last_click_at ? Date.parse(t.last_click_at) : 0);
+      var uv = Number(t.unique_viewers), uc = Number(t.unique_clickers), rate = uv > 0 ? Math.min(100, Math.round(uc / uv * 100)) : null;
+      var k = function (label, v, key) { return '<div class="pa-k"><b data-count="' + Number(v) + '" data-kind="int" data-ck="pa-' + promo.id + '-' + key + '">' + Number(v) + '</b><span>' + label + '</span></div>'; };
+      var sr = series(d, tab); if (sel === null || sel >= sr.length) sel = sr.length - 1;
+      var max = sr.reduce(function (a, s) { return Math.max(a, s.views, s.clicks); }, 0);
+      var h = function (n) { return n > 0 ? Math.max(8, Math.round(n / max * 100)) : 0; };
+      var chart = Number(t.views) === 0 ?
+        Z.empty({ icon: 'megaphone', title: 'No views yet', text: live ? 'Your promotion is live. Views and clicks appear here the moment members see or tap it.' : 'This promotion did not get any views.' }) :
+        Z.chips([['hours', 'Last 24 hours'], ['days', 'Last 7 days']], tab, 'data-pt') +
+        '<div class="pa-chart' + (drawn ? ' still' : '') + '" data-pa-cols style="--n:' + sr.length + '">' + sr.map(function (s, i) {
+          return '<button type="button" class="pa-col' + (i === sel ? ' on' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '" aria-label="' + Z.esc(tipText(s)) + '">' +
+            '<span class="pa-bars"><i class="v' + (s.views ? '' : ' zero') + '" style="--h:' + h(s.views) + '%"></i><i class="c' + (s.clicks ? '' : ' zero') + '" style="--h:' + h(s.clicks) + '%"></i></span><em>' + s.label + '</em></button>';
+        }).join('') + '</div>' +
+        '<div class="pa-tip" data-pa-tip aria-live="polite">' + Z.esc(tipText(sr[sel])) + '</div>' +
+        '<div class="pa-leg"><span><i class="v"></i>Views</span><span><i class="c"></i>Clicks</span></div>';
+      body.innerHTML =
+        (live ? '<div class="pa-live"><span class="online-dot" data-s="live"></span><span>Live \u00b7 refreshes every 15 s</span><em>' + (last ? 'Last activity ' + agoText(now - last) : 'No activity yet') + '</em></div>'
+              : '<div class="pa-live pa-done"><span>Final results</span><em>Ended ' + Z.esc(Z.fmtDate(d.expires_at)) + '</em></div>') +
+        '<div class="pa-kpis">' + k('Views today', td.views, 'tv') + k('Clicks today', td.clicks, 'tc') + k('Members who saw it', uv, 'uv') +
+          '<div class="pa-k"><b>' + (rate === null ? '\u2014' : rate + '%') + '</b><span>Click rate</span></div></div>' +
+        (live && d.position ? '<div class="pa-pos">' + Z.icon('trophy') + '<span>Position <b>#' + d.position + '</b> of ' + d.live_total + ' live \u00b7 ' + leftText(Date.parse(d.expires_at) - now) + '</span></div>' : '') +
+        '<div class="card pa-card">' + chart + '</div>' +
+        '<div class="summary"><div class="kv"><span>Total views</span><b>' + Number(t.views) + '</b></div><div class="kv"><span>Total clicks</span><b>' + Number(t.clicks) + '</b></div>' +
+          '<div class="kv"><span>Members who clicked</span><b>' + uc + '</b></div></div>' +
+        '<p class="hint">A view counts once per member per day, when your promotion was on their screen. Up to 3 clicks per member per day count. Your own visits and the admin\u2019s are never counted. Only numbers are shown, never who.</p>';
+      drawn = true;
+      Z.countUp(body);
+    }
+    async function load() {
+      var r = await sb.rpc('promo_analytics', { p_id: promo.id });
+      if (!sheet.el.isConnected) return;
+      if (r.error) {
+        if (!data) { body.innerHTML = Z.errorState(); var rt = Z.$('[data-retry]', body); if (rt) rt.addEventListener('click', function () { body.innerHTML = Z.skel(3, 70); load(); }); }
+        return;                                       // a failed refresh keeps showing the last real numbers
+      }
+      data = r.data; skew = Date.parse(data.now) - Date.now();
+      render();
+      if (data.status !== 'active') clearInterval(timer);
+    }
+    body.addEventListener('click', function (e) {
+      var tb = e.target.closest('[data-pt]');
+      if (tb) { tab = tb.getAttribute('data-pt'); sel = null; drawn = false; if (data) render(); return; }
+      var c = e.target.closest('.pa-col');
+      if (c && data) {
+        sel = Number(c.getAttribute('data-i'));
+        Array.prototype.forEach.call(body.querySelectorAll('.pa-col'), function (x) { var on = x === c; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+        var tip = body.querySelector('[data-pa-tip]'); if (tip) tip.textContent = tipText(series(data, tab)[sel]);
+      }
+    });
+    timer = setInterval(function () { if (!document.hidden && sheet.el.isConnected && data && data.status === 'active') load(); }, 15000);
+    load();
   }
 
   /* Browse tab: approved promotions only, with a search bar and service / category filters. */
@@ -134,8 +259,10 @@
       list.innerHTML = items.length ? items.map(card).join('') : '<div class="card">' + Z.empty({ icon: 'search', title: 'No promotions found', text: q || svc || catg ? 'Try a different search or filter.' : 'Nothing to browse yet. Check back soon.' }) + '</div>';
       more.innerHTML = done || !items.length ? '' : '<button class="btn btn-tonal btn-block" id="pmb">Load more</button>';
       var b = Z.$('#pmb', more); if (b) b.addEventListener('click', function () { Z.busy(b, true); load(false); });
+      observeCards(list);
     }
 
+    list.addEventListener('click', function (e) { var a = e.target.closest('[data-pclick]'); if (a) trackClick(a.getAttribute('data-pclick')); });
     Z.$('#psq', el).addEventListener('input', Z.debounce(function (e) { q = e.target.value.trim(); load(true); }, 300));
     Z.$('#psv', el).addEventListener('change', function (e) { svc = e.target.value; load(true); });
     Z.$('#pct', el).addEventListener('change', function (e) { catg = e.target.value; load(true); });
@@ -155,13 +282,20 @@
     el.innerHTML = '<section class="page"><div class="page-head"><div><h2>My Promotions</h2><p class="sub">Promote your channel or account and track your requests. To discover others, open Browse.</p></div></div>' +
       '<button class="btn btn-primary btn-block" id="promote">' + Z.icon('megaphone') + 'Promote my channel</button>' +
       '<div id="pbody"></div></section>';
-    var body = Z.$('#pbody', el);
+    var body = Z.$('#pbody', el), mineList = [];
+    body.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pa]');
+      if (!b) return;
+      var id = b.getAttribute('data-pa'), pr = mineList.filter(function (x) { return x.id === id; })[0];
+      if (pr) openAnalytics(pr);
+    });
 
     async function showMine() {
       body.innerHTML = Z.skel(2, 220);
       var r = await sb.rpc('my_promotions');
       if (ctx.stale()) return;
       if (r.error) { body.innerHTML = Z.errorState(); Z.$('[data-retry]', body).addEventListener('click', showMine); return; }
+      mineList = r.data || [];
       body.innerHTML = (r.data || []).length ? r.data.map(mine).join('') : '<div class="card">' + Z.empty({ icon: 'megaphone', title: 'No promotions yet', text: 'Promote your channel or account to reach more people.' }) + '</div>';
     }
 
