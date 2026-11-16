@@ -55,12 +55,15 @@
     t.push(['/referral', 'gift', 'Refer']);
     t.push(['/milestones', 'star', 'Milestones']);
     t.push(['/activity', 'receipt', 'Transactions']);
-    if (!(Z.state.settings && Z.state.settings.chat_enabled === false)) t.push(['/community', 'chat', 'Chat']);
+    if (!(Z.state.settings && Z.state.settings.chat_enabled === false)) t.push(['/community', 'chat', 'Chat', 0, true]);
     if (Z.promos.enabled()) t.push(['/promotions', 'megaphone', 'Promote', Number(s.promo_live) || 0]);
     if (Z.leaderboard.enabled()) t.push(['/leaderboard', 'trophy', 'Ranking']);
     if (Z.appsVisible()) t.push(['/apps', 'download', 'Apps']);
     return '<div class="qa-grid">' + t.slice(0, 8).map(function (x) {
-      return '<button class="qa" data-go="' + x[0] + '"><span class="qa-ic">' + Z.icon(x[1]) + (x[3] > 0 ? '<em class="qa-badge">' + x[3] + '</em>' : '') + '</span><span>' + x[2] + '</span></button>';
+      var unread = x[4] ? Math.max(0, Number(s.chat_unread) || 0) : 0;   // chat: live number, kept up to date by Z.chat.bindBadge
+      var badge = x[4] ? '<em class="qa-badge" data-chat-badge' + (unread > 0 ? '' : ' hidden') + '>' + (unread > 99 ? '99+' : unread) + '</em>'
+                       : (x[3] > 0 ? '<em class="qa-badge">' + x[3] + '</em>' : '');
+      return '<button class="qa" data-go="' + x[0] + '"><span class="qa-ic">' + Z.icon(x[1]) + badge + '</span><span>' + x[2] + '</span></button>';
     }).join('') + '</div>';
   }
 
@@ -143,6 +146,7 @@
     Z.countUp(el);
     Z.pwa.bindCards(el);
     Z.checkin.bindHome(el);
+    Z.chat.bindBadge(el);
     Z.banners.mount(Z.$('#bn', el), ctx);
     Z.slots.attach(el, ctx);
   };

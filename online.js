@@ -9,7 +9,8 @@
 (function () {
   'use strict';
   var Z = window.Z;
-  var O = Z.online = { ch: null, mode: null, fails: 0, backoff: 60000, retryTimer: null };
+  var O = Z.online = { ch: null, mode: null, fails: 0, backoff: 60000, retryTimer: null, joined: false };
+  var listeners = [];
   var CHANNEL = 'zyven-online';
   var MAX_FAILS = 3, MAX_BACKOFF = 600000, SYNC_WAIT = 10000;
 
@@ -18,9 +19,14 @@
     return Array.prototype.map.call(h, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('').slice(0, 32);
   }
 
+  // Members can see how many people are online (a number only, never who). null = not connected yet, so nothing is shown.
+  O.count = function () { return O.ch && O.mode === 'track' && O.joined ? Object.keys(O.ch.presenceState()).length : null; };
+  O.onChange = function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; };
+  function changed() { var n = O.count(); listeners.slice().forEach(function (f) { try { f(n); } catch (e) { /* a listener must never break presence */ } }); }
+
   function drop() {
     if (O.ch) { try { sb.removeChannel(O.ch); } catch (e) { /* already closed */ } }   // leaving also removes our presence
-    O.ch = null; O.mode = null;
+    O.ch = null; O.mode = null; O.joined = false; changed();
   }
   function clearRetry() { if (O.retryTimer) { clearTimeout(O.retryTimer); O.retryTimer = null; } }
 
@@ -32,9 +38,11 @@
     if (O.ch || !Z.state.user) return;                 // logged out / started twice while hashing
     var ch = sb.channel(CHANNEL, { config: { private: true, presence: { key: key } } });
     O.ch = ch; O.mode = 'track';
+    ch.on('presence', { event: 'sync' }, function () { if (O.ch === ch) changed(); });
     ch.subscribe(function (status) {
       if (O.ch !== ch) return;                          // an old channel we already dropped
-      if (status === 'SUBSCRIBED') { O.fails = 0; O.backoff = 60000; ch.track({ on: 1 }); return; }
+      if (status === 'SUBSCRIBED') { O.fails = 0; O.backoff = 60000; O.joined = true; ch.track({ on: 1 }); changed(); return; }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { O.joined = false; changed(); }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (++O.fails < MAX_FAILS) return;              // the library retries on its own a couple of times
         drop();                                         // keeps failing: stop hammering the server, try again later

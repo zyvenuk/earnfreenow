@@ -123,6 +123,9 @@
     'anual linking is disabled': 'Linking Google is not switched on yet. Please contact support.',
     'already linked': 'That Google account is already linked to another Zyven account.',
     maintenance_platform: 'Zyven is under maintenance right now. Please try again later.',
+    chat_reply_gone: 'The message you replied to is no longer in the chat.',
+    chat_message_gone: 'That message is no longer in the chat.',
+    chat_bad_reaction: 'That reaction is not available.',
     already_checked_in: 'You have already checked in today. Come back tomorrow to keep your streak going.',
     checkin_needs_ads: 'Finish the required number of ads today first, then check in.',
     checkin_disabled: 'Daily check-in is not available right now.',
@@ -354,6 +357,7 @@
     Z.state.summary = r.data; Z.state.summaryAt = Date.now();
     Z.updateBalanceChip();
     if (Z.updateNavDots) Z.updateNavDots();
+    if (Z.chat && Z.chat.setBase && typeof r.data.chat_unread === 'number') Z.chat.setBase(r.data.chat_unread);
     if (typeof r.data.unread_notifications === 'number') {
       Z.state.unread = r.data.unread_notifications; Z.state.unreadAt = Date.now();
       if (Z.updateBell) Z.updateBell();

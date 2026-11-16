@@ -147,6 +147,7 @@
       var hadUser = !!Z.state.user;
       var hadPageScript = Z.slots.pageInjected;
       Z.online.stop();
+      if (Z.chat && Z.chat.stop) Z.chat.stop();
       resetState();
       Z.ready = true; hideSplash();
       if (hadUser && hadPageScript) { location.hash = '#/login'; return location.reload(); }
@@ -177,6 +178,7 @@
     Z.route();
     setTimeout(function () { if (Z.push && Z.state.user) Z.push.sync(); }, 1500);
     Z.online.start();   // users only; the admin account never announces itself
+    if (Z.chat && Z.chat.start) Z.chat.start();   // one shared chat stream: feeds the chat screen and the unread number
     if (Z.freshLogin) {
       Z.freshLogin = false;
       setTimeout(function () { if (Z.state.user && !Z.recovery) Z.maybeShowFollowPopup(); }, 500);
