@@ -14,11 +14,12 @@
 
   C.view = async function (body, ctx) {
     var res = await Promise.all([sb.rpc('admin_storage_stats'),
-      sb.from('platform_settings').select('retain_tx_days,retain_views_days,retain_mail_days,inactive_unverified_days,inactive_verified_days,inactive_keep_money').eq('id', true).single(),
-      sb.from('inactive_purge_log').select('*').order('ran_at', { ascending: false }).limit(5)]);
+      sb.from('platform_settings').select('retain_tx_days,retain_views_days,retain_mail_days,inactive_unverified_days,inactive_verified_days,inactive_keep_balance,inactive_keep_referral').eq('id', true).single(),
+      sb.from('inactive_purge_log').select('*').order('ran_at', { ascending: false }).limit(5),
+      sb.from('admin_audit_log').select('*').order('at', { ascending: false }).limit(10)]);
     if (ctx.stale()) return;
     if (res[0].error || res[1].error) { body.innerHTML = Z.errorState(); Z.$('[data-retry]', body).addEventListener('click', function () { Z.route(); }); return; }
-    var d = res[0].data, st = res[1].data, runs = (res[2] && res[2].data) || [];
+    var d = res[0].data, st = res[1].data, runs = (res[2] && res[2].data) || [], audit = (res[3] && res[3].data) || [];
 
     body.innerHTML = '<div class="page-head"><div><h2>Cleanup</h2><p class="sub">Keeps the database small so the free plan is enough.</p></div></div>' +
       '<div class="card info-card"><div class="ic-line"><span>Database</span><b>' + mb(d.db_bytes) + '</b></div>' + bar(d.db_bytes, DB_LIMIT) +
@@ -40,7 +41,8 @@
       '<p class="hint" style="margin-top:-6px">An account that has not been used (no login, no ads watched) for this many days is deleted with ALL its data: wallet, transactions, referrals, devices, chat. It cannot be undone. Runs every night at 3:00 AM Pakistan time. 0 = off.</p>' +
       Z.field({ id: 'iu', label: 'Unverified accounts (days)', value: st.inactive_unverified_days, attrs: 'inputmode="numeric"', hint: '0 = never delete, otherwise 7 to 3650.' }) +
       Z.field({ id: 'iv', label: 'Verified accounts (days)', value: st.inactive_verified_days, attrs: 'inputmode="numeric"', hint: '0 = never delete, otherwise 7 to 3650.' }) +
-      Z.field({ id: 'ik', label: 'Accounts that still have money', type: 'select', value: st.inactive_keep_money ? '1' : '0', options: [['1', 'Keep them (balance or referral balance above 0)'], ['0', 'Delete them too']] }) +
+      Z.field({ id: 'ikb', label: 'Keep accounts with Main balance of at least', value: Number(st.inactive_keep_balance), attrs: 'inputmode="decimal"', hint: '0 = this rule is not used. Example: 50 keeps every account holding 50 or more.' }) +
+      Z.field({ id: 'ikr', label: 'Keep accounts with referral balance of at least', value: Number(st.inactive_keep_referral), attrs: 'inputmode="decimal"', hint: '0 = this rule is not used. An account is kept if it meets either amount.' }) +
       '<p class="hint">Never deleted, whatever you set: your admin account, accounts with a pending or processing payout, an active paid plan, or a running promotion.</p>' +
       '<div id="rerr4"></div><button class="btn btn-primary btn-block" type="submit">Save</button>' +
       '<button class="btn btn-tonal btn-block" type="button" id="runi2">Preview and delete now</button>' +
@@ -54,7 +56,17 @@
 
       '<div class="card form"><h3 class="mini-title" style="margin:0">Clean now</h3>' +
       '<button class="btn btn-tonal btn-block" id="runc">Run database cleanup now</button>' +
-      '<button class="btn btn-tonal btn-block" id="runi">Remove unused images</button></div>';
+      '<button class="btn btn-tonal btn-block" id="runi">Remove unused images</button></div>' +
+
+      '<div class="section-head"><h3>Recent admin actions</h3></div><div class="card">' +
+      (audit.length ? audit.map(function (a) {
+        var dt = a.details || {};
+        var what = a.action === 'delete_user' ? 'Account deleted' : a.action === 'grant_plan' ? 'Plan activated' : a.action;
+        var more = a.action === 'delete_user' ? 'balance ' + Z.money(dt.balance) + ' \u00b7 referral ' + Z.money(dt.referral_balance) :
+                   a.action === 'grant_plan' ? (dt.plan || 'plan') + ' until ' + (dt.expires_at ? Z.fmtDate(dt.expires_at) : '') : '';
+        return '<div class="row"><span class="row-main"><span class="row-title">' + Z.esc(what) + ' \u00b7 ' + Z.esc(a.target_email || '') + '</span>' +
+          '<span class="row-sub">' + Z.fmtDate(a.at) + (more ? ' \u00b7 ' + Z.esc(more) : '') + '</span></span></div>';
+      }).join('') : Z.empty({ icon: 'shield', title: 'Nothing yet', text: 'Manual account deletions and plans you activate are listed here.' })) + '</div>';
 
     Z.$('#rf3', body).addEventListener('submit', function (e) {
       e.preventDefault();
@@ -70,7 +82,9 @@
 
     /* ---- inactive accounts: save the rule, or preview + delete right now ---- */
     function readInactive(err) {
-      var p = { unv: parseInt(Z.$('#iu', body).value, 10), ver: parseInt(Z.$('#iv', body).value, 10), keep: Z.$('#ik', body).value === '1' };
+      function amt(id) { var v = String(Z.$(id, body).value).trim().replace(/,/g, '') || '0'; var n = Number(v); return isFinite(n) && n >= 0 && n <= 1000000 ? Math.round(n * 100) / 100 : NaN; }
+      var p = { unv: parseInt(Z.$('#iu', body).value, 10), ver: parseInt(Z.$('#iv', body).value, 10), kb: amt('#ikb'), kr: amt('#ikr') };
+      if (!isFinite(p.kb) || !isFinite(p.kr)) { Z.formError(err, 'The keep amounts must be 0 (not used) or a number up to 1000000.'); return null; }
       var bad = [p.unv, p.ver].some(function (n) { return !isFinite(n) || n < 0 || (n !== 0 && (n < 7 || n > 3650)); });
       if (bad) { Z.formError(err, 'Each value must be 0 (off) or a whole number of days from 7 to 3650.'); return null; }
       Z.formError(err, ''); return p;
@@ -79,7 +93,7 @@
       e.preventDefault();
       var err = Z.$('#rerr4', body), p = readInactive(err); if (!p) return;
       Z.run(Z.$('#rf4 button[type=submit]', body), async function () {
-        var r = await sb.from('platform_settings').update({ inactive_unverified_days: p.unv, inactive_verified_days: p.ver, inactive_keep_money: p.keep }).eq('id', true);
+        var r = await sb.from('platform_settings').update({ inactive_unverified_days: p.unv, inactive_verified_days: p.ver, inactive_keep_balance: p.kb, inactive_keep_referral: p.kr }).eq('id', true);
         if (r.error) throw r.error;
         Z.toast(p.unv || p.ver ? 'Saved. Inactive accounts are cleared every night.' : 'Saved. Automatic deletion is off.', 'ok');
       }, err);
@@ -88,7 +102,7 @@
       var b = this, err = Z.$('#rerr4', body), p = readInactive(err); if (!p) return;
       if (!p.unv && !p.ver) return Z.formError(err, 'Set the days for unverified and/or verified accounts first.');
       Z.run(b, async function () {
-        var pv = await sb.rpc('admin_inactive_preview', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_money: p.keep });
+        var pv = await sb.rpc('admin_inactive_preview', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_balance: p.kb, p_keep_referral: p.kr });
         if (pv.error) throw pv.error;
         var x = pv.data, total = x.unverified + x.verified;
         if (!total) { Z.toast('No accounts match right now' + (x.skipped ? ' (' + x.skipped + ' inactive but protected)' : ''), 'ok'); return; }
@@ -104,7 +118,7 @@
           confirm: 'Delete ' + total, cancel: 'Keep them', danger: true
         });
         if (!ok) return;
-        var r = await sb.rpc('admin_purge_inactive', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_money: p.keep });
+        var r = await sb.rpc('admin_purge_inactive', { p_unverified_days: p.unv, p_verified_days: p.ver, p_keep_balance: p.kb, p_keep_referral: p.kr });
         if (r.error) throw r.error;
         Z.toast(r.data.deleted + ' accounts deleted', 'ok'); Z.route();
       });

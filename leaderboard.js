@@ -15,14 +15,19 @@
       '<span class="row-main"><span class="row-title">Leaderboard</span><span class="row-sub">See the top users and your rank</span></span>' + Z.icon('chevron', 'row-chev') + '</button></div>';
   };
 
-  var METRICS = [['ads', 'Ads Watched'], ['referrals', 'Referrals'], ['earned', 'Earned']];
+  var METRICS = [['ads', 'Ads Watched'], ['referrals', 'Referrals'], ['earned', 'Earned'], ['streak', 'Streak']];
+  // the Streak board only exists while the admin has daily check-in switched on
+  function tabs() { return Z.state.settings && Z.state.settings.checkin_enabled === false ? METRICS.filter(function (m) { return m[0] !== 'streak'; }) : METRICS; }
   var PERIODS = [['today', 'Today'], ['week', '7 Days'], ['month', 'This Month']];
   function label(list, key) { return list.filter(function (x) { return x[0] === key; })[0][1]; }
   // What the board is ranked by. Referrals: only VALID ones count, Level 1 first (it is worth more), Level 2 only breaks ties.
-  function note(metric) { return metric === 'referrals' ? 'valid Level 1 referrals first, then Level 2' : label(METRICS, metric); }
+  function note(metric) { return metric === 'referrals' ? 'valid Level 1 referrals first, then Level 2' : metric === 'streak' ? 'current check-in streak, longest first' : label(METRICS, metric); }
+  // a streak has no Today / 7 Days / Month, so that board ignores the period
+  function when(metric, period) { return metric === 'streak' ? '' : ' \u00b7 ' + label(PERIODS, period); }
 
   function valueText(metric, r) {
     if (metric === 'earned') return Z.money(r.value);
+    if (metric === 'streak') return Number(r.value) + '<small>' + (Number(r.value) === 1 ? 'day' : 'days') + (Number(r.best) > Number(r.value) ? ' \u00b7 best ' + Number(r.best) : '') + '</small>';
     if (metric === 'referrals') return Number(r.l1 != null ? r.l1 : r.value) + '<small>L1 \u00b7 +' + (r.l2 || 0) + ' L2</small>';   // big number = Level 1 referrals
     return String(Number(r.value));
   }
@@ -50,34 +55,37 @@
     var metric = 'ads', period = 'today';
     el.innerHTML = '<section class="page"><div class="lb-title" id="lbhead"><h2>Leaderboard</h2><p>Rank by ' + note(metric) + '</p></div>' +
       Z.chips(PERIODS, period, 'data-lp') +
-      '<div class="seg">' + METRICS.map(function (m) { return '<button class="seg-btn' + (m[0] === metric ? ' on' : '') + '" data-lm="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="seg">' + tabs().map(function (m) { return '<button class="seg-btn' + (m[0] === metric ? ' on' : '') + '" data-lm="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
       '<div id="lbpod"></div><div id="lbme"></div><div class="card" id="lb" hidden></div></section>';
     var pod = Z.$('#lbpod', el), box = Z.$('#lb', el), meBox = Z.$('#lbme', el), head = Z.$('#lbhead', el);
+    var chipsEl = (Z.$('[data-lp]', el) || {}).parentNode;
 
     async function load() {
-      var key = metric + '|' + period, hit = cache[key];
+      var per = metric === 'streak' ? 'today' : period;      // the streak board has no period
+      var key = metric + '|' + per, hit = cache[key];
+      if (chipsEl) chipsEl.hidden = metric === 'streak';
       pod.innerHTML = Z.skel(1, 230); box.hidden = true; meBox.innerHTML = '';
-      head.innerHTML = '<h2>Leaderboard</h2><p>Rank by ' + note(metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
+      head.innerHTML = '<h2>Leaderboard</h2><p>Rank by ' + note(metric) + when(metric, period) + '</p>';
       var d;
       if (hit && Date.now() - hit.at < 30000) d = hit.data;
       else {
-        var r = await sb.rpc('leaderboard', { p_metric: metric, p_period: period });
+        var r = await sb.rpc('leaderboard', { p_metric: metric, p_period: per });
         if (ctx.stale()) return;
         if (r.error) { pod.innerHTML = Z.errorState(); Z.$('[data-retry]', pod).addEventListener('click', load); return; }
         d = r.data; cache[key] = { at: Date.now(), data: d };
       }
-      if (ctx.stale() || key !== metric + '|' + period) return;
+      if (ctx.stale() || key !== metric + '|' + per) return;
       if (!d.enabled) { pod.innerHTML = Z.empty({ icon: 'trophy', title: 'Leaderboard is not available' }); return; }
 
       var rows = d.rows || [];
-      head.innerHTML = '<h2>Top ' + Math.min(d.size, Math.max(rows.length, 1)) + ' Users</h2><p>Rank by ' + note(metric) + ' \u00b7 ' + label(PERIODS, period) + '</p>';
+      head.innerHTML = '<h2>Top ' + Math.min(d.size, Math.max(rows.length, 1)) + ' Users</h2><p>Rank by ' + note(metric) + when(metric, period) + '</p>';
 
       pod.innerHTML = rows.length ? podium(rows, metric)
         : '<div class="card">' + Z.empty({ icon: 'trophy', title: 'No one here yet', text: 'Be the first on the board for this period.' }) + '</div>';
 
       meBox.innerHTML = d.me
-        ? '<div class="card lb-me"><span class="lb-rank">' + d.me.rank + '</span><span class="row-main"><span class="row-title">Your rank</span><span class="row-sub">' + (metric === 'referrals' ? 'L1 ' + (d.me.l1 || 0) + ' \u00b7 L2 ' + (d.me.l2 || 0) : valueText(metric, d.me).replace(/<small>/, ' \u00b7 ').replace(/<[^>]+>/g, '')) + '</span></span></div>'
-        : '<div class="alert a-info">' + Z.icon('info') + '<div>You are not ranked yet for this period. ' + (metric === 'ads' ? 'Watch an ad to get on the board.' : metric === 'referrals' ? 'Invite friends. A referral counts once it becomes valid.' : 'Earn rewards to get on the board.') + '</div></div>';
+        ? '<div class="card lb-me"><span class="lb-rank">' + d.me.rank + '</span><span class="row-main"><span class="row-title">Your rank</span><span class="row-sub">' + (metric === 'referrals' ? 'L1 ' + (d.me.l1 || 0) + ' \u00b7 L2 ' + (d.me.l2 || 0) : metric === 'streak' ? Number(d.me.value) + (Number(d.me.value) === 1 ? ' day' : ' days') + (Number(d.me.best) > Number(d.me.value) ? ' \u00b7 best ' + Number(d.me.best) : '') : valueText(metric, d.me).replace(/<small>/, ' \u00b7 ').replace(/<[^>]+>/g, '')) + '</span></span></div>'
+        : '<div class="alert a-info">' + Z.icon('info') + '<div>You are not ranked yet' + (metric === 'streak' ? '. ' : ' for this period. ') + (metric === 'streak' ? 'Check in every day to build a streak and get on the board.' : metric === 'ads' ? 'Watch an ad to get on the board.' : metric === 'referrals' ? 'Invite friends. A referral counts once it becomes valid.' : 'Earn rewards to get on the board.') + '</div></div>';
 
       // everyone after the top 3, in full (never folded)
       var rest = rows.slice(3);

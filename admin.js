@@ -231,6 +231,81 @@
     return h;
   }
 
+
+  /* ---------- Activate a plan for a member (free, from the admin) ---------- */
+  async function grantPlanSheet(u, done) {
+    var sh = Z.sheet('<h2 class="sheet-title">Activate a plan</h2><p class="muted small">' + Z.esc(u.full_name) + ' \u00b7 ' + Z.esc(u.email) + '</p><div id="gpb">' + Z.skel(2, 60) + '</div>');
+    var q = await Promise.all([
+      sb.from('plans').select('id,plan_no,name,plan_type,price,duration_days,is_active,is_archived').eq('is_archived', false).order('plan_no'),
+      sb.from('user_plans').select('plan_name,expires_at').eq('user_id', u.id).eq('status', 'active').gt('expires_at', new Date().toISOString()),
+      sb.from('platform_settings').select('plan_policy').eq('id', true).single()]);
+    var box = Z.$('#gpb', sh.el); if (!box) return;
+    if (q[0].error || q[1].error) { box.innerHTML = '<p class="muted small">Could not load the plans.</p>'; return; }
+    var plans = q[0].data || [], active = q[1].data || [];
+    if (!plans.length) { box.innerHTML = Z.empty({ icon: 'layout', title: 'No plans yet', text: 'Create a plan first, then you can give it to a member.' }); return; }
+    box.innerHTML =
+      (active.length ? '<div class="alert a-info">' + Z.icon('info') + '<div>Active now: ' + active.map(function (a) { return Z.esc(a.plan_name) + ' (until ' + Z.esc(Z.fmtDay(a.expires_at)) + ')'; }).join(', ') + '</div></div>' : '<p class="muted small">This member has no active plan right now.</p>') +
+      '<form class="form" id="gpf" novalidate>' +
+      Z.field({ id: 'gp-plan', label: 'Plan', type: 'select', value: plans[0].id, options: plans.map(function (p) {
+        return [p.id, 'Plan ' + p.plan_no + ' \u00b7 ' + p.name + ' (' + (p.plan_type === 'free' ? 'FREE' : Z.money(p.price)) + ', ' + p.duration_days + ' days)' + (p.is_active ? '' : ' \u00b7 switched off for sale')];
+      }) }) +
+      (active.length ? Z.field({ id: 'gp-rep', label: 'Their current plan', type: 'select', value: '0', options: [['0', 'Keep it (the new plan runs together with it)'], ['1', 'End it now and replace it']] }) : '') +
+      Z.field({ id: 'gp-note', label: 'Note for your records (optional)', value: '', attrs: 'maxlength="200"' }) +
+      '<p class="hint">Nothing is charged. The plan starts now and runs for its full length, and the member gets a mail about it. Limits like "sold out" or "one per user" do not stop you.</p>' +
+      '<div id="gperr"></div><button class="btn btn-primary btn-block" type="submit">Activate plan</button></form>';
+    Z.$('#gpf', sh.el).addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var err = Z.$('#gperr', sh.el), pid = Z.$('#gp-plan', sh.el).value, rep = !!Z.$('#gp-rep', sh.el) && Z.$('#gp-rep', sh.el).value === '1';
+      var pl = plans.filter(function (p) { return p.id === pid; })[0];
+      if (!pl) return Z.formError(err, 'Choose a plan.');
+      var ok = await Z.confirm({ title: 'Activate ' + pl.name + '?', text: pl.name + ' will start now for ' + u.full_name + ' and run for ' + pl.duration_days + ' days. Nothing is charged.' + (rep ? ' Their current plan ends now.' : ''), confirm: 'Activate' });
+      if (!ok) return;
+      Z.run(Z.$('#gpf button[type=submit]', sh.el), async function () {
+        var r = await sb.rpc('admin_grant_plan', { p_user_id: u.id, p_plan_id: pid, p_replace: rep, p_note: Z.$('#gp-note', sh.el).value.trim() || null });
+        if (r.error) {
+          var m = String(r.error.message || '');
+          var text = m.indexOf('plan_other_active') !== -1 ? 'Your plan rules allow only one active plan. Choose "End it now and replace it".' :
+            m.indexOf('plan_already_active') !== -1 ? 'This member already has this plan running.' :
+            m.indexOf('plan_archived') !== -1 ? 'This plan is archived. Un-archive it first.' : Z.errMsg(r.error);
+          Z.formError(err, text); return;
+        }
+        Z.toast('Plan activated for ' + u.full_name, 'ok'); sh.close(); done();
+      }, err);
+    });
+  }
+
+  /* ---------- Delete an account permanently ---------- */
+  async function deleteSheet(u, done) {
+    var sh = Z.sheet('<h2 class="sheet-title">Delete account permanently</h2><div id="dlb">' + Z.skel(3, 50) + '</div>');
+    var r = await sb.rpc('admin_user_delete_preview', { p_user_id: u.id });
+    var box = Z.$('#dlb', sh.el); if (!box) return;
+    if (r.error) { box.innerHTML = '<p class="muted small">' + Z.esc(Z.errMsg(r.error)) + '</p>'; return; }
+    var d = r.data;
+    if (d.is_owner) { box.innerHTML = '<div class="alert a-warn">' + Z.icon('shield') + '<div>This is the admin account. It cannot be deleted.</div></div>'; return; }
+    var blocked = Number(d.open_payouts) > 0;
+    box.innerHTML =
+      '<div class="alert a-error">' + Z.icon('alert') + '<div><b>This cannot be undone.</b> The account and ALL of its data are erased: wallet, transactions, referrals, plans, devices, chat messages and promotions.</div></div>' +
+      '<div class="summary">' + lineKV('Member', Z.esc(d.full_name || '') + ' \u00b7 ' + Z.esc(d.email)) + lineKV('Main balance', Z.money(d.balance)) + lineKV('Referral balance', Z.money(d.referral_balance)) +
+      lineKV('Active plans', Number(d.active_plans)) + lineKV('Running promotions', Number(d.live_promotions)) + lineKV('Members they invited', Number(d.invited_members)) +
+      lineKV('Open payouts', Number(d.open_payouts) + (blocked ? ' (' + Z.money(d.open_payout_amount) + ')' : '')) + '</div>' +
+      (blocked ?
+        '<div class="alert a-warn">' + Z.icon('alert') + '<div>A payout for this member is still being processed. Mark it paid or reject it first, then come back. Deleting now would erase the record of money you still owe.</div></div>' :
+        '<form class="form" id="dlf" novalidate>' + Z.field({ id: 'dl-email', label: 'Type their email to confirm', value: '', attrs: 'autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="' + Z.esc(d.email) + '"' }) +
+        '<div id="dlerr"></div><button class="btn btn-danger btn-block" type="submit" id="dlbtn" disabled>Delete permanently</button></form>');
+    if (blocked) return;
+    var inp = Z.$('#dl-email', sh.el), btn = Z.$('#dlbtn', sh.el);
+    inp.addEventListener('input', function () { btn.disabled = inp.value.trim().toLowerCase() !== String(d.email).toLowerCase(); });
+    Z.$('#dlf', sh.el).addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (btn.disabled) return;
+      Z.run(btn, async function () {
+        var x = await sb.rpc('admin_delete_user', { p_user_id: u.id, p_confirm_email: inp.value.trim() });
+        if (x.error) throw x.error;
+        Z.toast('Account deleted', 'ok'); sh.close(); done();
+      }, Z.$('#dlerr', sh.el));
+    });
+  }
+
   async function userSheet(u, onChange) {
     var w = relation(u.wallets) || {};
     var sh = Z.sheet('<h2 class="sheet-title">' + Z.esc(u.full_name) + '</h2>' +
@@ -241,6 +316,8 @@
       '<div class="sheet-actions row-actions">' +
       '<button class="btn btn-tonal" id="adj">Adjust balance</button>' +
       '<button class="btn ' + (u.status === 'active' ? 'btn-danger-ghost' : 'btn-primary') + '" id="tg">' + (u.status === 'active' ? 'Suspend' : 'Reactivate') + '</button></div>' +
+      '<div class="sheet-actions row-actions" style="margin-top:8px"><button class="btn btn-tonal" id="gp">Activate plan</button>' +
+      '<button class="btn btn-danger-ghost" id="del">Delete account</button></div>' +
       '<h3 class="mini-title">Recent activity</h3><div id="ua">' + Z.skel(2, 50) + '</div>');
 
     Promise.all([
@@ -270,6 +347,9 @@
         Z.toast('User ' + (next === 'suspended' ? 'suspended' : 'reactivated'), 'ok'); sh.close(); onChange();
       });
     });
+
+    Z.$('#gp', sh.el).addEventListener('click', function () { grantPlanSheet(u, function () { sh.close(); onChange(); }); });
+    Z.$('#del', sh.el).addEventListener('click', function () { deleteSheet(u, function () { sh.close(); onChange(); }); });
 
     Z.$('#adj', sh.el).addEventListener('click', function () {
       var s2 = Z.sheet('<h2 class="sheet-title">Adjust balance</h2><form id="af" novalidate>' +
